@@ -26,10 +26,7 @@ export function Layout({ currentPage, onNavigate, children }: LayoutProps) {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header
-          currentPage={currentPage}
-          onToggleSidebar={() => setCollapsed(c => !c)}
-        />
+
         <AlertBanner />
         <main className="flex-1 overflow-y-auto p-6">
           {children}

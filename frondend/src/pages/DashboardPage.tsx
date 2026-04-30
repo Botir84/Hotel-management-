@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, RefreshCw, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Room, Reservation } from '../types';
 import api, { roomService } from '../services/api';
 
@@ -8,7 +8,6 @@ import { MetricsCards } from '../components/dashboard/MetricsCards';
 import { RoomGrid } from '../components/dashboard/RoomGrid';
 import { CheckInModal } from '../components/checkin/CheckInModal';
 import { RoomDetailsModal } from '../components/dashboard/RoomDetailsModal';
-import { Button } from '../components/ui/Button';
 
 // Contextlar
 import { useTheme } from '../contexts/ThemeContext';
@@ -34,7 +33,6 @@ export function DashboardPage() {
         api.get('/checkins/'),
       ]);
 
-      // Django Rest Framework pagination (results) yoki oddiy array bo'lsa ham ishlaydi
       const rData = Array.isArray(roomsRes.data) ? roomsRes.data : (roomsRes.data?.results || []);
       const cData = Array.isArray(checkinsRes.data) ? checkinsRes.data : (checkinsRes.data?.results || []);
 
@@ -51,18 +49,16 @@ export function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
-  // Xona bosilganda mantiqiy tekshiruv
+  // Xona bosilganda mantiqiy tekshiruv (User Summary'da ko'rsatilgan Django mantiqiga mos)
   const handleRoomClick = (room: Room) => {
     setSelectedRoom(room);
-
-    // Statuslarni kichik harflarda tekshiramiz (Backend modelingga mos)
     const status = room.status.toLowerCase();
 
     if (status === 'available') {
       setCheckInOpen(true);
     } else if (status === 'occupied') {
       setDetailsOpen(true);
-    } else if (status === 'dirty') { // 'cleaning' emas, 'dirty' (Django modelingga mos)
+    } else if (status === 'dirty' || status === 'cleaning') {
       if (window.confirm(`${room.number}-xona tozalandimi?`)) {
         handleFinishCleaning(room.id);
       }
@@ -78,70 +74,73 @@ export function DashboardPage() {
     }
   };
 
-  return (
-    <div className="space-y-6 p-4 animate-in fade-in duration-500">
-
-      {/* 1. Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Operations Overview
-          </h2>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => { setSelectedRoom(undefined); setCheckInOpen(true); }}
-          >
-            <Plus size={18} className="mr-1" /> New Check-In
-          </Button>
-        </div>
+  if (loading && rooms.length === 0) {
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-[#5D7B93]" />
       </div>
+    );
+  }
 
-      {/* 2. Metrics Section */}
+  return (
+    <div className="space-y-8 p-2 animate-in fade-in slide-in-from-bottom-4 duration-700">
+
+      {/* 1. Metrics Section - Operatsiyalar holati haqida qisqacha ma'lumot */}
       <MetricsCards
         rooms={rooms}
         reservations={checkins}
-        incidents={[]} // Oq ekran muammosini hal qilish uchun
+        incidents={[]}
       />
 
-      {/* 3. Rooms Grid Section */}
-      <div className={`p-6 rounded-[2rem] border ${isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'} backdrop-blur-md`}>
+      {/* 2. Main Registry Section */}
+      <div className="relative">
         <RoomGrid
           rooms={rooms}
           onRoomClick={handleRoomClick}
           loading={loading}
           onRefresh={fetchData}
+          onNewCheckIn={() => {
+            setSelectedRoom(undefined);
+            setCheckInOpen(true);
+          }}
         />
       </div>
 
-      {/* MODAL: Check-In (Yashil xona uchun) */}
+      {/* MODALLAR */}
+
+      {/* 1. Check-In Modal (Bo'sh xona yoki yangi check-in uchun) */}
       {checkInOpen && (
         <CheckInModal
           isOpen={checkInOpen}
           room={selectedRoom}
-          onClose={() => { setCheckInOpen(false); setSelectedRoom(undefined); }}
-          onSuccess={() => { setCheckInOpen(false); fetchData(); }}
+          onClose={() => {
+            setCheckInOpen(false);
+            setSelectedRoom(undefined);
+          }}
+          onSuccess={() => {
+            setCheckInOpen(false);
+            fetchData();
+          }}
         />
       )}
 
-      {/* MODAL: Room Details (Band xona uchun) */}
+      {/* 2. Room Details Modal (Band xonalar va mehmon ma'lumotlari) */}
       {detailsOpen && selectedRoom && (
         <RoomDetailsModal
           isOpen={detailsOpen}
           room={selectedRoom}
-          // Django modelingda ForeignKey 'room' deb nomlangan
           reservation={checkins.find(c => {
             const checkinRoomId = typeof c.room === 'object' ? c.room.id : c.room;
             return String(checkinRoomId) === String(selectedRoom.id);
           })}
-          onClose={() => { setDetailsOpen(false); setSelectedRoom(undefined); }}
-          onSuccess={() => { setDetailsOpen(false); fetchData(); }}
+          onClose={() => {
+            setDetailsOpen(false);
+            setSelectedRoom(undefined);
+          }}
+          onSuccess={() => {
+            setDetailsOpen(false);
+            fetchData();
+          }}
         />
       )}
     </div>

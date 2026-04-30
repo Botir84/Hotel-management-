@@ -35,7 +35,7 @@ export function RoomGrid({ rooms = [], onRoomClick, onRefresh, loading }: RoomGr
   return (
     <div
       className={`rounded-[2.5rem] border p-6 transition-all duration-500 backdrop-blur-md
-        ${isDark ? 'bg-white/5 border-white/10' : 'bg-[#fffcf0]/50 border-[#eee8d5]'}`}
+        ${isDark ? 'bg-white/5 border-white/10' : 'bg-white/80 border-slate-200'}`} // Sarg'ish fon oq rangga almashtirildi
     >
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -54,7 +54,7 @@ export function RoomGrid({ rooms = [], onRoomClick, onRefresh, loading }: RoomGr
         <div className="flex items-center gap-3">
           {/* Advanced Glass Filter Bar */}
           <div className={`relative flex items-center gap-1 p-1.5 rounded-[1.5rem] border backdrop-blur-xl
-            ${isDark ? 'bg-black/20 border-white/5' : 'bg-white/30 border-slate-200 shadow-sm'}`}>
+            ${isDark ? 'bg-black/20 border-white/5' : 'bg-white/60 border-slate-200 shadow-sm'}`}>
 
             {filters.map(f => {
               const count = f.id === 'all' ? rooms.length : rooms.filter(r => r.status === f.id).length;
@@ -114,7 +114,7 @@ export function RoomGrid({ rooms = [], onRoomClick, onRefresh, loading }: RoomGr
         </div>
       </div>
 
-      {/* Grid Container - Adjusted for exactly 5 columns on large screens */}
+      {/* Grid Container */}
       <div className="relative min-h-[400px]">
         <AnimatePresence mode="wait">
           <motion.div
@@ -142,9 +142,6 @@ export function RoomGrid({ rooms = [], onRoomClick, onRefresh, loading }: RoomGr
           </motion.div>
         </AnimatePresence>
       </div>
-
-
-
     </div>
   );
 }
