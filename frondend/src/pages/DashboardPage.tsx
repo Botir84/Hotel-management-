@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { Room, Reservation } from '../types';
 import api, { roomService } from '../services/api';
 
@@ -21,12 +21,15 @@ export function DashboardPage() {
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { isDark } = useTheme();
 
-  // Ma'lumotlarni backenddan olish
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  // Ma'lumotlarni yuklash funksiyasi
+  const fetchData = useCallback(async (isManual = false) => {
+    if (isManual) setRefreshing(true);
+    else setLoading(true);
+
     try {
       const [roomsRes, checkinsRes] = await Promise.all([
         roomService.getRooms(),
@@ -42,24 +45,28 @@ export function DashboardPage() {
       console.error("Ma'lumotlarni yuklashda xato:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     fetchData();
+    // Har 2 daqiqada avtomatik yangilash (Live Dashboard effekti)
+    const interval = setInterval(() => fetchData(), 120000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Xona bosilganda mantiqiy tekshiruv (User Summary'da ko'rsatilgan Django mantiqiga mos)
   const handleRoomClick = (room: Room) => {
     setSelectedRoom(room);
     const status = room.status.toLowerCase();
 
     if (status === 'available') {
       setCheckInOpen(true);
-    } else if (status === 'occupied') {
+    } else if (status === 'occupied' || status === 'booked') {
       setDetailsOpen(true);
     } else if (status === 'dirty' || status === 'cleaning') {
-      if (window.confirm(`${room.number}-xona tozalandimi?`)) {
+      // confirm() o'rniga chiroyli modal ishlatsa ham bo'ladi, hozircha mantiq saqlandi
+      if (window.confirm(`${room.number}-xona tayyormi? Holatni 'Bo'sh'ga o'tkazamiz.`)) {
         handleFinishCleaning(room.id);
       }
     }
@@ -68,7 +75,7 @@ export function DashboardPage() {
   const handleFinishCleaning = async (roomId: number) => {
     try {
       await api.patch(`/rooms/${roomId}/`, { status: 'available' });
-      fetchData();
+      fetchData(true);
     } catch (e) {
       alert("Xonani yangilashda xato yuz berdi");
     }
@@ -76,39 +83,56 @@ export function DashboardPage() {
 
   if (loading && rooms.length === 0) {
     return (
-      <div className="h-full w-full flex items-center justify-center">
-        <Loader2 className="w-10 h-10 animate-spin text-[#5D7B93]" />
+      <div className="h-[80vh] w-full flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-600 opacity-80" />
+        <p className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 animate-pulse">
+          Tizim yuklanmoqda...
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 p-2 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-6 md:space-y-10 p-3 md:p-6 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
-      {/* 1. Metrics Section - Operatsiyalar holati haqida qisqacha ma'lumot */}
-      <MetricsCards
-        rooms={rooms}
-        reservations={checkins}
-        incidents={[]}
-      />
+      {/* 1. Header & Quick Refresh */}
+      <div className="flex items-center justify-between px-1">
+        <div>
+          <h1 className={`text-2xl md:text-3xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            Boshqaruv Paneli
+          </h1>
+          <p className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
+            Xonalar va Bandlik Monitoringi
+          </p>
+        </div>
 
-      {/* 2. Main Registry Section */}
-      <div className="relative">
+
+      </div>
+
+      {/* 2. Metrics Section */}
+      <section className="animate-in fade-in zoom-in-95 duration-1000 delay-150">
+        <MetricsCards
+          rooms={rooms}
+          reservations={checkins}
+          incidents={[]}
+        />
+      </section>
+
+      {/* 3. Main Room Registry Section */}
+      <section className="relative min-h-[400px]">
         <RoomGrid
           rooms={rooms}
           onRoomClick={handleRoomClick}
-          loading={loading}
-          onRefresh={fetchData}
+          loading={loading || refreshing}
+          onRefresh={() => fetchData(true)}
           onNewCheckIn={() => {
             setSelectedRoom(undefined);
             setCheckInOpen(true);
           }}
         />
-      </div>
+      </section>
 
       {/* MODALLAR */}
-
-      {/* 1. Check-In Modal (Bo'sh xona yoki yangi check-in uchun) */}
       {checkInOpen && (
         <CheckInModal
           isOpen={checkInOpen}
@@ -119,18 +143,18 @@ export function DashboardPage() {
           }}
           onSuccess={() => {
             setCheckInOpen(false);
-            fetchData();
+            fetchData(true);
           }}
         />
       )}
 
-      {/* 2. Room Details Modal (Band xonalar va mehmon ma'lumotlari) */}
       {detailsOpen && selectedRoom && (
         <RoomDetailsModal
           isOpen={detailsOpen}
           room={selectedRoom}
           reservation={checkins.find(c => {
-            const checkinRoomId = typeof c.room === 'object' ? c.room.id : c.room;
+            // Room ID object yoki number bo'lishini tekshirish
+            const checkinRoomId = typeof c.room === 'object' ? (c.room as any).id : c.room;
             return String(checkinRoomId) === String(selectedRoom.id);
           })}
           onClose={() => {
@@ -139,7 +163,7 @@ export function DashboardPage() {
           }}
           onSuccess={() => {
             setDetailsOpen(false);
-            fetchData();
+            fetchData(true);
           }}
         />
       )}

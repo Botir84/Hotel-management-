@@ -6,7 +6,8 @@ from .views import (
     MyTokenObtainPairView, # O'zimizning login view
     PaymentViewSet,
     CheckPaymentSecurity,
-    SecurityAlertAPI
+    SecurityAlertAPI,
+    UserProfileView
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -23,6 +24,7 @@ urlpatterns = [
     # Login va Token operatsiyalari
     # Diqqat: 'login/' deb yozish kifoya, chunki asosiy urls.py da 'api/' prefiksi bor
     path('login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('profile/', UserProfileView.as_view(), name='user-profile'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     # Kamera pulni aniqlaganda birinchi bo'lib shu endpointga POST so'rov yuboradi
     path('security/alerts/', SecurityAlertAPI.as_view(), name='create-security-alert'),

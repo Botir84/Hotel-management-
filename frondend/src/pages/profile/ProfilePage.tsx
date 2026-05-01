@@ -1,234 +1,547 @@
-import React, { useState } from 'react';
-import { User, Mail, Shield, Calendar, Save, Camera, Phone, CheckCircle2, Globe } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+    User, Mail, Save, Camera, Phone,
+    CheckCircle2, Loader2, FileText
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { profileService } from '../../services/api';
 
 export function ProfilePage() {
     const { user } = useAuth();
     const { isDark } = useTheme();
+
     const [isEditing, setIsEditing] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [updating, setUpdating] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const API_BASE_URL = 'http://127.0.0.1:8000';
 
     const [formData, setFormData] = useState({
-        firstName: user?.first_name || 'Botir',
-        lastName: user?.last_name || 'Arabboyev',
-        email: user?.email || 'botir@example.com',
-        phone: '+998 90 123 45 67',
-        bio: 'Senior Web Developer & System Administrator'
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        bio: '',
+        avatar: null as File | string | null,
     });
 
-    const handleSave = (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsEditing(false);
+    const fetchProfileData = async () => {
+        try {
+            setLoading(true);
+            const response = await profileService.getProfile();
+            const data = response.data;
+            let avatarUrl = data.avatar || null;
+            if (avatarUrl && typeof avatarUrl === 'string' && !avatarUrl.startsWith('http')) {
+                avatarUrl = `${API_BASE_URL}${avatarUrl}`;
+            }
+            setFormData({
+                first_name: data.first_name || '',
+                last_name: data.last_name || '',
+                email: data.email || '',
+                phone: data.phone || '',
+                bio: data.bio || '',
+                avatar: avatarUrl,
+            });
+        } catch (error) {
+            console.error('Error loading profile:', error);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const cardBase = isDark
-        ? 'bg-slate-900/40 backdrop-blur-xl border-slate-800/50 shadow-2xl'
-        : 'bg-white/70 backdrop-blur-xl border-gray-200 shadow-xl';
+    useEffect(() => { fetchProfileData(); }, []);
 
-    const inputBase = `w-full px-4 py-3 rounded-2xl border transition-all duration-300 outline-none focus:ring-4 ${isDark
-        ? 'bg-slate-950/50 border-slate-700 text-white focus:border-blue-500 focus:ring-blue-500/10'
-        : 'bg-gray-50/50 border-gray-200 text-gray-800 focus:border-blue-500 focus:ring-blue-500/10'
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            setUpdating(true);
+            const data = new FormData();
+            data.append('first_name', formData.first_name);
+            data.append('last_name', formData.last_name);
+            data.append('email', formData.email);
+            data.append('bio', formData.bio);
+            data.append('phone', formData.phone);
+            if (formData.avatar instanceof File) data.append('avatar', formData.avatar);
+            await profileService.updateProfile(data);
+            setIsEditing(false);
+            await fetchProfileData();
+        } catch (error: any) {
+            console.error('Save error:', error.response?.data);
+            alert("An error occurred while saving.");
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setFormData({ ...formData, avatar: file });
+            setIsEditing(true);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div style={{
+                display: 'flex', height: '100vh',
+                alignItems: 'center', justifyContent: 'center',
+                background: isDark ? '#0f172a' : '#f8fafc',
+            }}>
+                <Loader2 size={36} color="#5D7B93" style={{ animation: 'spin 1s linear infinite' }} />
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+        );
+    }
+
+    const avatarSrc = formData.avatar
+        ? (typeof formData.avatar === 'string'
+            ? formData.avatar
+            : URL.createObjectURL(formData.avatar))
+        : null;
+
+    // ── Color tokens from RoomDetailsModal ──
+    const pageBg = isDark ? '#0f172a' : '#f8fafc';
+    const cardBg = isDark ? '#1e293b' : '#ffffff';
+    const cardBdr = isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0';
+    const innerBg = isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc';
+    const innerBdr = isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9';
+    const txt = isDark ? '#ffffff' : '#1e293b';
+    const muted = isDark ? '#94a3b8' : '#64748b';
+    const inpBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(248,250,252,0.5)';
+    const inpBdr = isDark ? 'rgba(255,255,255,0.10)' : '#e2e8f0';
+
+    const inputClass = `w-full px-5 py-3.5 rounded-2xl text-sm border transition-all outline-none
+    ${isDark
+            ? 'bg-white/5 border-white/10 text-slate-100 focus:border-[#5D7B93] focus:ring-4 focus:ring-[#5D7B93]/10'
+            : 'bg-slate-50/50 border-slate-200 text-slate-800 focus:border-[#5D7B93] focus:ring-4 focus:ring-[#5D7B93]/10'
         }`;
 
+    const labelClass = `block text-[10px] font-black mb-2 uppercase tracking-[0.15em] ${isDark ? 'text-slate-400' : 'text-[#5D7B93]'}`;
+
     return (
-        <div className="relative min-h-[calc(100vh-4rem)] p-4 md:p-8 overflow-hidden">
-            {/* Background Ornaments */}
-            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[120px] -z-10" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px] -z-10" />
+        <>
+            <style>{`
+        .pp * { box-sizing: border-box; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pp-fi { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-            <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+        .pp-page { animation: pp-fi .4s ease; }
 
-                {/* Header Section */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                    <div>
-                        <h2 className={`text-3xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                            Profil Sozlamalari
-                        </h2>
-                        <p className={`text-sm mt-1 font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                            Tizimdagi shaxsiy profilingizni boshqaring va yangilang
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-blue-500 bg-blue-500/10 px-4 py-2 rounded-full">
-                        <CheckCircle2 size={14} />
-                        Hisob faol holatda
-                    </div>
-                </div>
+        /* avatar hover */
+        .pp-av-group { position: relative; }
+        .pp-av-overlay {
+          position: absolute; inset: 0;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(0,0,0,0.45); border-radius: 50%;
+          opacity: 0; transition: opacity .22s ease;
+          cursor: pointer;
+        }
+        .pp-av-group:hover .pp-av-overlay { opacity: 1; }
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        /* info item hover */
+        .pp-info-item { transition: background .18s, border-color .18s; }
+        .pp-info-item:hover { border-color: rgba(93,123,147,0.35) !important; }
 
-                    {/* Left Column: Personal Card */}
-                    <div className="lg:col-span-4 space-y-6">
-                        <div className={`p-8 rounded-[2.5rem] border ${cardBase} text-center relative overflow-hidden`}>
-                            {/* Profile Avatar */}
-                            <div className="relative w-40 h-40 mx-auto group">
-                                <div className="absolute inset-0 bg-blue-500 rounded-[2rem] blur-2xl opacity-20 group-hover:opacity-40 transition-opacity" />
-                                <div className="relative w-full h-full rounded-[2.5rem] bg-gradient-to-br from-blue-500 to-indigo-700 p-1">
-                                    <div className="w-full h-full rounded-[2.3rem] bg-slate-900 flex items-center justify-center overflow-hidden">
-                                        <span className="text-white text-5xl font-black tracking-tighter">
-                                            {formData.firstName[0]}{formData.lastName[0]}
-                                        </span>
+        /* edit btn hover */
+        .pp-edit-btn {
+          transition: all .25s cubic-bezier(.34,1.56,.64,1);
+        }
+        .pp-edit-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+        }
+        .pp-edit-btn:active { transform: none; }
+
+        /* save btn */
+        .pp-save-btn { transition: all .28s cubic-bezier(.34,1.56,.64,1); }
+        .pp-save-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(93,123,147,0.4) !important; }
+        .pp-save-btn:active { transform: none; }
+        .pp-save-btn:disabled { opacity: .55; cursor: not-allowed; transform: none !important; }
+
+        /* cancel btn */
+        .pp-cancel-btn { transition: background .18s; }
+
+        /* input focus already handled by inputClass focus:ring */
+
+        /* scrollbar */
+        .pp-page::-webkit-scrollbar { width: 4px; }
+        .pp-page::-webkit-scrollbar-thumb { background: rgba(93,123,147,0.25); border-radius: 99px; }
+
+        @media (max-width: 640px) {
+          .pp-hero-row { flex-direction: column !important; align-items: center !important; text-align: center !important; }
+          .pp-grid-2 { grid-template-columns: 1fr !important; }
+          .pp-view-grid { grid-template-columns: 1fr !important; }
+          .pp-hero-text { align-items: center !important; }
+        }
+      `}</style>
+
+            <div
+                className="pp pp-page"
+                style={{ background: pageBg, minHeight: '100vh', padding: '32px 16px 60px', overflowY: 'auto', color: txt }}
+            >
+                <div style={{ maxWidth: 860, margin: '0 auto' }}>
+
+                    {/* ══════════════ CARD ══════════════ */}
+                    <div style={{
+                        background: cardBg,
+                        border: `1px solid ${cardBdr}`,
+                        borderRadius: 40,
+                        boxShadow: isDark
+                            ? '0 32px 80px rgba(0,0,0,0.45)'
+                            : '0 8px 40px rgba(93,123,147,0.12)',
+                        overflow: 'hidden',
+                    }}>
+
+                        {/* ── HERO BANNER ── */}
+                        <div style={{
+                            background: 'linear-gradient(135deg, #3d5f74 0%, #5D7B93 50%, #7a9ab3 100%)',
+                            padding: '44px 40px',
+                            position: 'relative',
+                            overflow: 'hidden',
+                        }}>
+                            {/* decorative bg circles */}
+                            <div style={{
+                                position: 'absolute', top: -70, right: -70,
+                                width: 280, height: 280, borderRadius: '50%',
+                                background: 'rgba(255,255,255,0.06)', pointerEvents: 'none',
+                            }} />
+                            <div style={{
+                                position: 'absolute', bottom: -50, left: '35%',
+                                width: 180, height: 180, borderRadius: '50%',
+                                background: 'rgba(255,255,255,0.04)', pointerEvents: 'none',
+                            }} />
+
+                            <div
+                                className="pp-hero-row"
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, position: 'relative', zIndex: 2 }}
+                            >
+                                {/* Left: avatar + name */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+                                    {/* Avatar */}
+                                    <div className="pp-av-group" style={{ flexShrink: 0 }}>
+                                        <div style={{
+                                            width: 100, height: 100, borderRadius: '50%',
+                                            border: '4px solid rgba(255,255,255,0.3)',
+                                            overflow: 'hidden',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            background: 'rgba(255,255,255,0.15)',
+                                            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                                            fontSize: 32, fontWeight: 900, color: '#fff',
+                                            letterSpacing: '-.04em',
+                                        }}>
+                                            {avatarSrc
+                                                ? <img
+                                                    src={avatarSrc}
+                                                    alt="Avatar"
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                                    onError={e => {
+                                                        (e.target as HTMLImageElement).src =
+                                                            `https://ui-avatars.com/api/?name=${formData.first_name}+${formData.last_name}&background=5D7B93&color=fff&bold=true`;
+                                                    }}
+                                                />
+                                                : `${formData.first_name?.[0] ?? ''}${formData.last_name?.[0] ?? ''}` || <User size={32} color="rgba(255,255,255,0.7)" />
+                                            }
+                                        </div>
+                                        {/* Camera overlay — always visible on hover */}
+                                        <div
+                                            className="pp-av-overlay"
+                                            onClick={() => fileInputRef.current?.click()}
+                                        >
+                                            <Camera size={20} color="#fff" strokeWidth={2.5} />
+                                        </div>
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleImageChange}
+                                            style={{ display: 'none' }}
+                                            accept="image/*"
+                                        />
+                                    </div>
+
+                                    {/* Name + badge */}
+                                    <div className="pp-hero-text" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-.03em', lineHeight: 1.2 }}>
+                                            {formData.first_name} {formData.last_name}
+                                        </h1>
+                                        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', margin: 0, fontWeight: 500 }}>
+                                            @{user?.username || 'foydalanuvchi'}
+                                        </p>
+                                        {/* Active badge — same as RoomDetailsModal pill */}
+                                        <div style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                                            marginTop: 4, width: 'fit-content',
+                                            padding: '4px 12px', borderRadius: 999,
+                                            background: 'rgba(255,255,255,0.15)',
+                                            border: '1px solid rgba(255,255,255,0.25)',
+                                            fontSize: 9, fontWeight: 800,
+                                            letterSpacing: '.14em', textTransform: 'uppercase',
+                                            color: '#fff',
+                                        }}>
+                                            <CheckCircle2 size={10} strokeWidth={2.5} />
+                                            Hisob faol
+                                        </div>
                                     </div>
                                 </div>
-                                <button className="absolute -bottom-2 -right-2 p-3 bg-white text-blue-600 rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all">
-                                    <Camera size={20} strokeWidth={2.5} />
-                                </button>
-                            </div>
 
-                            <div className="mt-8 space-y-2">
-                                <h3 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                                    {formData.firstName} {formData.lastName}
-                                </h3>
-                                <p className={`text-sm font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                                    @{user?.username || 'botir_admin'}
-                                </p>
-                            </div>
-
-                            <div className="mt-8 grid grid-cols-2 gap-4">
-                                <div className={`p-4 rounded-3xl ${isDark ? 'bg-slate-800/40' : 'bg-gray-50'}`}>
-                                    <p className="text-[10px] uppercase font-bold text-slate-500">Roli</p>
-                                    <p className={`text-sm font-bold mt-1 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                                        {user?.role?.toUpperCase()}
-                                    </p>
-                                </div>
-                                <div className={`p-4 rounded-3xl ${isDark ? 'bg-slate-800/40' : 'bg-gray-50'}`}>
-                                    <p className="text-[10px] uppercase font-bold text-slate-500">Kodi</p>
-                                    <p className={`text-sm font-bold mt-1 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                                        #ID-{Math.floor(Math.random() * 9000) + 1000}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Quick Stats Card */}
-                        <div className={`p-6 rounded-[2rem] border ${cardBase}`}>
-                            <h4 className={`text-sm font-bold mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>Tezkor ma'lumotlar</h4>
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-xl"><Globe size={18} /></div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-500 uppercase">Hudud</p>
-                                        <p className="text-sm font-semibold">O'zbekiston, Toshkent</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <div className="p-2.5 bg-blue-500/10 text-blue-500 rounded-xl"><Calendar size={18} /></div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-500 uppercase">Ro'yxatdan o'tdi</p>
-                                        <p className="text-sm font-semibold">12-Aprel, 2025</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Right Column: Edit Form */}
-                    <div className="lg:col-span-8">
-                        <div className={`p-8 md:p-10 rounded-[2.5rem] border ${cardBase} h-full`}>
-                            <div className="flex items-center justify-between mb-10">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-600/20">
-                                        <User size={22} />
-                                    </div>
-                                    <h4 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Asosiy Ma'lumotlar</h4>
-                                </div>
+                                {/* Right: Edit button */}
                                 {!isEditing && (
                                     <button
+                                        className="pp-edit-btn"
                                         onClick={() => setIsEditing(true)}
-                                        className="px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-600/30 transition-all active:scale-95"
+                                        style={{
+                                            padding: '10px 26px', borderRadius: 14, border: 'none',
+                                            background: '#fff', color: '#5D7B93',
+                                            fontSize: 10, fontWeight: 800,
+                                            letterSpacing: '.16em', textTransform: 'uppercase',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                                            flexShrink: 0,
+                                        }}
                                     >
-                                        Tahrirlash
+                                        Edit Profile
                                     </button>
                                 )}
                             </div>
+                        </div>
 
-                            <form onSubmit={handleSave} className="space-y-8">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Ismingiz</label>
-                                        <input
-                                            type="text"
-                                            value={formData.firstName}
-                                            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                                            disabled={!isEditing}
-                                            className={inputBase}
-                                        />
+                        {/* ── BODY ── */}
+                        <div style={{ padding: '32px 40px 36px' }}>
+
+                            {/* Header row for section */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+                                <div style={{
+                                    width: 36, height: 36, borderRadius: 10,
+                                    background: 'linear-gradient(135deg, #5D7B93, #A2B3C1)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    boxShadow: '0 4px 14px rgba(93,123,147,0.32)',
+                                    flexShrink: 0,
+                                }}>
+                                    <User size={17} color="#fff" strokeWidth={2} />
+                                </div>
+                                <div>
+                                    <p style={{ fontSize: 15, fontWeight: 800, margin: 0, letterSpacing: '-.02em', color: txt }}>
+                                        Shaxsiy ma'lumotlar
+                                    </p>
+                                    <p style={{ fontSize: 11, color: muted, margin: '1px 0 0' }}>
+                                        {isEditing ? 'Ma\'lumotlaringizni tahrirlang' : 'Hisob ma\'lumotlaringiz'}
+                                    </p>
+                                </div>
+                                {/* small badge like RoomDetailsModal */}
+                                <div style={{
+                                    marginLeft: 'auto',
+                                    padding: '3px 10px', borderRadius: 6,
+                                    background: 'rgba(93,123,147,0.1)',
+                                    border: '1px solid rgba(93,123,147,0.2)',
+                                    fontSize: 9, fontWeight: 800,
+                                    letterSpacing: '.12em', textTransform: 'uppercase',
+                                    color: '#5D7B93',
+                                }}>
+                                    {user?.role || 'Staff'}
+                                </div>
+                            </div>
+
+                            {/* ── VIEW MODE ── */}
+                            {!isEditing ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    {/* Email + Phone grid */}
+                                    <div
+                                        className="pp-view-grid"
+                                        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
+                                    >
+                                        {[
+                                            { icon: <Mail size={18} color="#5D7B93" strokeWidth={2} />, label: 'Email Address', value: formData.email },
+                                            { icon: <Phone size={18} color="#5D7B93" strokeWidth={2} />, label: 'Phone Number', value: formData.phone || 'Biriktirilmagan' },
+                                        ].map(item => (
+                                            <div
+                                                key={item.label}
+                                                className="pp-info-item"
+                                                style={{
+                                                    display: 'flex', alignItems: 'flex-start', gap: 14,
+                                                    padding: '16px 18px', borderRadius: 20,
+                                                    background: innerBg, border: `1px solid ${innerBdr}`,
+                                                }}
+                                            >
+                                                <div style={{
+                                                    width: 40, height: 40, borderRadius: 12,
+                                                    background: 'rgba(93,123,147,0.1)',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    flexShrink: 0,
+                                                }}>
+                                                    {item.icon}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.15em', textTransform: 'uppercase', color: '#5D7B93', marginBottom: 4 }}>
+                                                        {item.label}
+                                                    </div>
+                                                    <div style={{ fontSize: 14, fontWeight: 600, color: txt }}>
+                                                        {item.value}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Familiyangiz</label>
-                                        <input
-                                            type="text"
-                                            value={formData.lastName}
-                                            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                                            disabled={!isEditing}
-                                            className={inputBase}
-                                        />
+
+                                    {/* Bio full width */}
+                                    <div
+                                        className="pp-info-item"
+                                        style={{
+                                            display: 'flex', alignItems: 'flex-start', gap: 14,
+                                            padding: '16px 18px', borderRadius: 20,
+                                            background: innerBg, border: `1px solid ${innerBdr}`,
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: 40, height: 40, borderRadius: 12,
+                                            background: 'rgba(93,123,147,0.1)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            flexShrink: 0,
+                                        }}>
+                                            <FileText size={18} color="#5D7B93" strokeWidth={2} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.15em', textTransform: 'uppercase', color: '#5D7B93', marginBottom: 4 }}>
+                                                Biography
+                                            </div>
+                                            <div style={{ fontSize: 14, fontWeight: 500, color: formData.bio ? txt : muted, fontStyle: formData.bio ? 'normal' : 'italic', lineHeight: 1.6 }}>
+                                                {formData.bio || "No biography provided yet."}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Email</label>
-                                        <div className="relative">
-                                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                                            <input
-                                                type="email"
-                                                value={formData.email}
-                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                                disabled={!isEditing}
-                                                className={`${inputBase} pl-12`}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Telefon</label>
-                                        <div className="relative">
-                                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                            ) : (
+                                /* ── EDIT MODE ── */
+                                <form onSubmit={handleSave}>
+                                    <div
+                                        className="pp-grid-2"
+                                        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}
+                                    >
+                                        <div>
+                                            <label className={labelClass}>Ism</label>
                                             <input
                                                 type="text"
-                                                value={formData.phone}
-                                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                                disabled={!isEditing}
-                                                className={`${inputBase} pl-12`}
+                                                className={inputClass}
+                                                placeholder="Botir"
+                                                value={formData.first_name}
+                                                onChange={e => setFormData({ ...formData, first_name: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className={labelClass}>Familiya</label>
+                                            <input
+                                                type="text"
+                                                className={inputClass}
+                                                placeholder="Arabboyev"
+                                                value={formData.last_name}
+                                                onChange={e => setFormData({ ...formData, last_name: e.target.value })}
                                             />
                                         </div>
                                     </div>
-                                </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Bio / Maqomingiz</label>
-                                    <textarea
-                                        rows={3}
-                                        value={formData.bio}
-                                        onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                                        disabled={!isEditing}
-                                        className={`${inputBase} resize-none`}
-                                    />
-                                </div>
+                                    <div
+                                        className="pp-grid-2"
+                                        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}
+                                    >
+                                        <div>
+                                            <label className={labelClass}>Email manzili</label>
+                                            <div style={{ position: 'relative' }}>
+                                                <Mail
+                                                    size={16} color="#A2B3C1" strokeWidth={2}
+                                                    style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                                                />
+                                                <input
+                                                    type="email"
+                                                    className={inputClass}
+                                                    style={{ paddingLeft: 44 }}
+                                                    placeholder="botir@example.com"
+                                                    value={formData.email}
+                                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className={labelClass}>Telefon raqami</label>
+                                            <div style={{ position: 'relative' }}>
+                                                <Phone
+                                                    size={16} color="#A2B3C1" strokeWidth={2}
+                                                    style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    className={inputClass}
+                                                    style={{ paddingLeft: 44 }}
+                                                    placeholder="+998 90 000 00 00"
+                                                    value={formData.phone}
+                                                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
 
-                                {isEditing && (
-                                    <div className="pt-6 flex items-center justify-end gap-4 animate-in fade-in zoom-in duration-300">
+                                    <div style={{ marginBottom: 28 }}>
+                                        <label className={labelClass}>Bio / Ma'lumot</label>
+                                        <textarea
+                                            rows={3}
+                                            className={inputClass}
+                                            style={{ resize: 'none' }}
+                                            placeholder="O'zingiz haqingizda qisqacha..."
+                                            value={formData.bio}
+                                            onChange={e => setFormData({ ...formData, bio: e.target.value })}
+                                        />
+                                    </div>
+
+                                    {/* Action buttons — same style as RoomDetailsModal footer */}
+                                    <div style={{
+                                        display: 'flex', gap: 12,
+                                        paddingTop: 20,
+                                        borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9'}`,
+                                    }}>
                                         <button
                                             type="button"
-                                            onClick={() => setIsEditing(false)}
-                                            className={`px-8 py-3 rounded-2xl font-bold transition-all ${isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                }`}
+                                            className="pp-cancel-btn"
+                                            onClick={() => { setIsEditing(false); fetchProfileData(); }}
+                                            style={{
+                                                flex: 1, padding: '16px 0', borderRadius: 24, border: 'none',
+                                                fontSize: 10, fontWeight: 800,
+                                                letterSpacing: '.14em', textTransform: 'uppercase',
+                                                cursor: 'pointer',
+                                                background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
+                                                color: muted,
+                                            }}
                                         >
                                             Bekor qilish
                                         </button>
                                         <button
                                             type="submit"
-                                            className="px-10 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black rounded-2xl hover:shadow-xl hover:shadow-blue-600/40 transition-all active:scale-95 flex items-center gap-2"
+                                            className="pp-save-btn"
+                                            disabled={updating}
+                                            style={{
+                                                flex: 2, padding: '16px 0', borderRadius: 24, border: 'none',
+                                                fontSize: 10, fontWeight: 800,
+                                                letterSpacing: '.18em', textTransform: 'uppercase',
+                                                cursor: 'pointer',
+                                                background: 'linear-gradient(135deg, #5D7B93 0%, #A2B3C1 100%)',
+                                                color: '#fff',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                                boxShadow: '0 8px 24px rgba(93,123,147,0.3)',
+                                            }}
                                         >
-                                            <Save size={20} />
-                                            O'zgarishlarni Saqlash
+                                            {updating
+                                                ? <Loader2 size={16} strokeWidth={2.5} style={{ animation: 'spin 1s linear infinite' }} />
+                                                : <Save size={16} strokeWidth={2.5} />
+                                            }
+                                            Saqlash
                                         </button>
                                     </div>
-                                )}
-                            </form>
+                                </form>
+                            )}
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }

@@ -3,13 +3,52 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import Room, CheckIn, Payment, SecurityAlert
+from .models import Profile
 
-class UserSerializer(serializers.ModelSerializer):
-    role = serializers.CharField(source='profile.role')
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    # Profile modelidagi maydonlarni bog'laymiz
+    phone = serializers.CharField(source='profile.phone', allow_blank=True, required=False)
+    bio = serializers.CharField(source='profile.bio', allow_blank=True, required=False)
+    # Rasm uchun ImageField (URL qaytaradi)
+    avatar = serializers.ImageField(source='profile.avatar', required=False, allow_null=True)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'role', 'first_name', 'last_name']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'phone', 'bio', 'avatar']
+        read_only_fields = ['username'] # Usernameni o'zgartirib bo'lmaydi
+
+    def update(self, instance, validated_data):
+        # 1. Profile ma'lumotlarini ajratib olish
+        # 'profile' kaliti source='profile.phone' kabi ishlatilgani uchun validated_data ichida bo'ladi
+        profile_data = validated_data.pop('profile', {})
+        
+        # 2. User ma'lumotlarini yangilash
+        instance.first_name = validated_data.get('first_name', instance.first_name)
+        instance.last_name = validated_data.get('last_name', instance.last_name)
+        instance.email = validated_data.get('email', instance.email)
+        instance.save()
+
+        # 3. PROFILE QISMI (Eng muhim joyi):
+        # try/except yordamida profilni olish yoki yaratish
+        try:
+            profile = instance.profile
+        except User.profile.RelatedObjectDoesNotExist:
+            from .models import Profile
+            profile = Profile.objects.create(user=instance)
+
+        # 4. Ma'lumotlarni profilga yozish
+        if 'phone' in profile_data:
+            profile.phone = profile_data.get('phone', profile.phone)
+        if 'bio' in profile_data:
+            profile.bio = profile_data.get('bio', profile.bio)
+        if 'avatar' in profile_data:
+            profile.avatar = profile_data.get('avatar', profile.avatar)
+        
+        profile.save()
+        return instance
+    
+
 
 # --- LOGIN ---
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):

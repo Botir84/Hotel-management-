@@ -1,5 +1,6 @@
 from django.shortcuts import render
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, generics
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -14,6 +15,59 @@ from datetime import timedelta
 from .models import CheckIn, SecurityAlert
 from rest_framework.permissions import AllowAny
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+
+from .serializers import UserProfileSerializer
+
+from rest_framework import generics, status, parsers
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from .serializers import UserProfileSerializer
+
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+    # Rasm va JSON ma'lumotlarni bir vaqtda qabul qilish uchun
+    parser_classes = (parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser)
+
+    def get_object(self):
+        return self.request.user
+
+    # MUHIM: Serializer ichida request'dan foydalanish uchun context uzatamiz
+    # Bu rasm URL'ini to'liq (http://...) qilib beradi va 404 xatosini yo'qotadi
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context
+
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        
+        # Parolni yangilash mantiqi
+        current_password = request.data.get("current_password")
+        new_password = request.data.get("new_password")
+
+        if current_password and new_password:
+            if not user.check_password(current_password):
+                return Response(
+                    {"detail": "Eski parol noto'g'ri."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            user.set_password(new_password)
+            user.save()
+
+        # MUHIM: partial=True qo'shish 400 xatolarini (required fields) oldini oladi
+        partial = kwargs.pop('partial', True) 
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response(serializer.data)
+    
 # 1. Login API
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
