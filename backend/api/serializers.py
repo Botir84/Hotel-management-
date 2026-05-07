@@ -131,12 +131,21 @@ class CheckInSerializer(serializers.ModelSerializer):
         
 
 
-class SecurityAlertSerializer(serializers.ModelSerializer):
-    # Statusning o'zbekcha nomini ham yuborish (ixtiyoriy, lekin foydali)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-    # Vaqtni tushunarli formatda yuborish
-    created_at = serializers.DateTimeField(source='detected_at', format="%Y-%m-%d %H:%M:%S")
+from rest_framework import serializers
+from .models import SecurityAlert
 
+class SecurityAlertSerializer(serializers.ModelSerializer):
+    # Holatning chiroyli matnini olish (masalan: 'pending' -> 'Tekshirilmoqda')
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
     class Meta:
         model = SecurityAlert
-        fields = ['id', 'created_at', 'status', 'status_display', 'video_clip']
+        fields = ['id', 'status', 'status_display', 'video_clip', 'detected_at']
+
+    def get_video_clip(self, obj):
+        if obj.video_clip:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.video_clip.url)
+            return obj.video_clip.url
+        return None

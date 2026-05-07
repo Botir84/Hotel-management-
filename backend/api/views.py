@@ -151,25 +151,36 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
 from django.utils import timezone
 
-class SecurityAlertAPI(APIView): # Nomini umumiyroq qildik
-    permission_classes = [AllowAny] 
+class SecurityAlertAPI(APIView):
+    permission_classes = [AllowAny]
+    # Fayllarni (MultiPart) va JSON-ni qabul qilish uchun parserlar shart
+    parser_classes = (parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser)
     
-    # 1. GET: React frontend alertlar ro'yxatini olishi uchun
     def get(self, request):
-        alerts = SecurityAlert.objects.all()[:30] # Serializeringizga qarab -detected_at tartibida keladi
+        # Modelingizdagi Meta ordering ishlaydi, lekin qo'shimcha tartiblash zarar qilmaydi
+        alerts = SecurityAlert.objects.all()[:30]
         serializer = SecurityAlertSerializer(alerts, many=True)
         return Response(serializer.data)
 
-    # 2. POST: AI Camera alert yaratishi uchun (Sizda bor edi)
     def post(self, request):
+        # AI kodingizda: files = {'video_clip': f} deb yuborilyapti
+        video_file = request.FILES.get('video_clip')
+        
+        # 1. Alertni yaratish
+        # detected_at default=timezone.now bo'lgani uchun uni ko'rsatish shart emas,
+        # lekin aniq vaqtni yozish xavfsizroq
         alert = SecurityAlert.objects.create(
             status='pending',
-            detected_at=timezone.now() 
+            detected_at=timezone.now(),
+            video_clip=video_file
         )
+        
+        # 2. Response qaytarish
         return Response({
-            "message": "Alert yaratildi",
+            "message": "Muvaffaqiyatli saqlandi",
             "id": alert.id,
-            "detected_at": timezone.localtime(alert.detected_at).strftime('%Y-%m-%d %H:%M:%S')
+            "status": alert.get_status_display(),
+            "video_url": alert.video_clip.url if alert.video_clip else None
         }, status=status.HTTP_201_CREATED)
 
 class CheckPaymentSecurity(APIView):
