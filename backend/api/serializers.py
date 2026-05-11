@@ -2,8 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import Room, CheckIn, Payment, SecurityAlert
-from .models import Profile
+from .models import Room, CheckIn, Payment, SecurityAlert, CameraZone
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -131,9 +130,6 @@ class CheckInSerializer(serializers.ModelSerializer):
         
 
 
-from rest_framework import serializers
-from .models import SecurityAlert
-
 class SecurityAlertSerializer(serializers.ModelSerializer):
     # Holatning chiroyli matnini olish (masalan: 'pending' -> 'Tekshirilmoqda')
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -149,3 +145,8 @@ class SecurityAlertSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.video_clip.url)
             return obj.video_clip.url
         return None
+    
+class CameraZoneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CameraZone
+        fields = ['id', 'name', 'zone_type', 'coordinates', 'created_at']

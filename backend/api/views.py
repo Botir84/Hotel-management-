@@ -6,13 +6,13 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from .models import Room, CheckIn, Payment
 from .serializers import (
-    RoomSerializer, CheckInSerializer,  MyTokenObtainPairSerializer, PaymentSerializer, SecurityAlertSerializer
+    RoomSerializer, CheckInSerializer,  MyTokenObtainPairSerializer, PaymentSerializer, SecurityAlertSerializer, CameraZoneSerializer
 )
 from django.db import transaction
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.utils import timezone
 from datetime import timedelta
-from .models import CheckIn, SecurityAlert
+from .models import CheckIn, SecurityAlert, CameraZone
 from rest_framework.permissions import AllowAny
 
 from rest_framework.views import APIView
@@ -227,3 +227,9 @@ class CheckPaymentSecurity(APIView):
         })
     
 
+
+
+class CameraZoneViewSet(viewsets.ModelViewSet):
+    queryset = CameraZone.objects.all().order_by('-created_at')
+    serializer_class = CameraZoneSerializer
+    permission_classes = [AllowAny] # Keyinchalik IsAdminUser qilish mumkin

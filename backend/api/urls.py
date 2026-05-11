@@ -7,7 +7,8 @@ from .views import (
     PaymentViewSet,
     CheckPaymentSecurity,
     SecurityAlertAPI,
-    UserProfileView
+    UserProfileView,
+    CameraZoneViewSet
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -15,6 +16,7 @@ router = DefaultRouter()
 router.register(r'rooms', RoomViewSet)
 router.register(r'checkins', CheckInViewSet)
 router.register(r'payments', PaymentViewSet)
+router.register(r'camera-zones', CameraZoneViewSet)
 
 urlpatterns = [
     # Routerdagi API-lar (rooms, checkins, incidents)

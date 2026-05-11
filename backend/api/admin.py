@@ -3,7 +3,7 @@ from django.contrib import admin
 # Register your models here.
 from django.contrib import admin
 from .models import Room, CheckIn, Payment
-from .models import SecurityAlert
+from .models import SecurityAlert, CameraZone
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
@@ -98,3 +98,34 @@ class ProfileAdmin(admin.ModelAdmin):
             return format_html('<img src="{}" style="width: 45px; height: 45px; border-radius: 5px;" />', obj.avatar.url)
         return "Rasm yo'q"
     avatar_tag.short_description = 'Profil rasmi'
+
+
+
+@admin.register(CameraZone)
+class CameraZoneAdmin(admin.ModelAdmin):
+    # Admin panel ro'yxatida ko'rinadigan ustunlar
+    list_display = ('id', 'name', 'zone_type', 'created_at')
+    
+    # Filtrlash imkoniyati (o'ng tomonda)
+    list_filter = ('zone_type', 'created_at')
+    
+    # Qidiruv maydoni
+    search_fields = ('name',)
+    
+    # Ma'lumot qo'shish sahifasida maydonlarni guruhlash (ixtiyoriy)
+    fieldsets = (
+        ('Asosiy ma\'lumotlar', {
+            'fields': ('name', 'zone_type')
+        }),
+        ('AI Konfiguratsiyasi', {
+            'fields': ('coordinates',),
+            'description': 'Zonaning nuqta koordinatalarini JSON formatida kiriting. '
+                          'Masalan: [{"x": 10, "y": 20}, {"x": 100, "y": 20}]'
+        }),
+    )
+
+    # Faqat o'qish uchun maydonlar
+    readonly_fields = ('created_at',)
+
+    # Ro'yxatdagi elementlarni tartiblash
+    ordering = ('-created_at',)

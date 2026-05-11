@@ -10,444 +10,241 @@ import threading
 from ultralytics import YOLO
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
+from shapely.geometry import Point as ShapelyPoint, Polygon
 
 # ============================================================
 # 1. SOZLAMALAR
 # ============================================================
 YOLO_MODEL_PATH      = 'yolov8n.pt'
 POSE_MODEL_PATH      = 'pose_landmarker_full.task'
-BACKEND_CREATE_URL   = "http://127.0.0.1:8000/api/security/alerts/"
-BACKEND_VERIFY_URL   = "http://127.0.0.1:8000/api/security/check/"
+BACKEND_BASE         = "http://127.0.0.1:8000/api"
+BACKEND_CREATE_URL   = f"{BACKEND_BASE}/security/alerts/"
+BACKEND_ZONES_URL    = f"{BACKEND_BASE}/camera-zones/"
 
-# YOLO class ID lari — ishlab chiqarish uchun: pul (cash) custom model kerak
-# Test uchun: 67=telefon, 26=sumka, 0=odam
-TRIGGER_CLASSES      = [67, 26]
+TRIGGER_CLASSES      = [67, 26] # 67: telefon, 26: sumka
 CONFIDENCE_THRESHOLD = 0.4
+COOLDOWN_PERIOD      = 300   
+FPS                  = 20
+PRE_SECONDS          = 5
+POST_SECONDS         = 5
+BUFFER_SIZE          = (PRE_SECONDS + POST_SECONDS) * FPS
 
-COOLDOWN_PERIOD      = 300   # 5 daqiqa — qayta alert bermaslik
-VERIFY_INTERVAL      = 30    # Backend tekshiruv oralig'i (soniya)
+frame_buffer = collections.deque(maxlen=BUFFER_SIZE)
+camera_zones = []
+
+# --- YANGI: Odamlar xotirasi uchun lug'at ---
+# { person_idx: {"has_item": bool, "item_timer": timestamp, "hand_side": "left/right"} }
+person_memory = collections.defaultdict(lambda: {"has_item": False, "last_seen": 0})
+
+POSE_CONNECTIONS = [
+    (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),
+    (11, 23), (12, 24), (23, 24),
+    (23, 25), (24, 26), (25, 27), (26, 28)
+]
 
 # ============================================================
-# 2. VIDEO BUFFER SOZLAMALARI
-# ============================================================
-FPS            = 20
-PRE_SECONDS    = 5    # Voqeadan OLDIN necha soniya saqlash
-POST_SECONDS   = 5    # Voqeadan KEYIN necha soniya yozib davom etish
-BUFFER_SIZE    = (PRE_SECONDS + POST_SECONDS) * FPS
-
-frame_buffer   = collections.deque(maxlen=BUFFER_SIZE)
-
-# ============================================================
-# 3. MODELLARNI YUKLASH
+# 2. MODELLARNI YUKLASH
 # ============================================================
 try:
     yolo_model = YOLO(YOLO_MODEL_PATH)
-    print("✅ YOLOv8 modeli yuklandi.")
-except Exception as e:
-    print(f"❌ YOLO yuklanmadi: {e}")
-    exit()
-
-try:
     base_options = python.BaseOptions(model_asset_path=POSE_MODEL_PATH)
     options = vision.PoseLandmarkerOptions(
         base_options=base_options,
         running_mode=vision.RunningMode.VIDEO,
-        num_poses=2,
-        min_pose_detection_confidence=0.5,
-        min_pose_presence_confidence=0.5,
-        min_tracking_confidence=0.5,
+        num_poses=4
     )
     landmarker = vision.PoseLandmarker.create_from_options(options)
-    print("✅ MediaPipe Pose Landmarker yuklandi.")
+    print("✅ Modellar yuklandi.")
 except Exception as e:
-    print(f"❌ MediaPipe yuklanmadi: {e}")
+    print(f"❌ Yuklashda xato: {e}")
     exit()
 
-print("✅ Barcha modellar tayyor. Kamera ochilmoqda...")
-
 # ============================================================
-# 4. VIDEO YOZISH VA BACKENDGA YUBORISH
+# 3. YORDAMCHI FUNKSIYALAR
 # ============================================================
 
-def get_working_fourcc():
-    """
-    Turli platformalarda ishlaydi.
-    Linux: mp4v, Windows: H264 yoki XVID, Mac: avc1
-    """
-    candidates = [
-        ('avc1', '.mp4'),
-        ('H264', '.mp4'),
-        ('mp4v', '.mp4'),
-        ('XVID', '.avi'),
-    ]
-    return candidates   # hammasini ketma-ket sinab ko'ramiz
+def fetch_zones():
+    global camera_zones
+    try:
+        response = requests.get(BACKEND_ZONES_URL, timeout=10)
+        if response.status_code == 200:
+            camera_zones = response.json()
+            print(f"✅ {len(camera_zones)} ta zona yuklandi.")
+    except:
+        print("⚠️ Backenddan zonalarni olib bo'lmadi.")
 
-def write_video_to_file(frames, fps, output_path):
-    """
-    Kadrlar ro'yxatini faylga yozadi.
-    Agar birinchi codec ishlamasa, keyingisini sinaydi.
-    """
-    if not frames:
-        print("⚠️  Yoziladigan kadr yo'q.")
-        return False
+def is_inside_zone(x, y, zone_coordinates):
+    try:
+        polygon = Polygon([(p['x'], p['y']) for p in zone_coordinates])
+        return polygon.contains(ShapelyPoint(x, y))
+    except: return False
 
-    h, w = frames[0].shape[:2]
-    candidates = get_working_fourcc()
+def draw_manual_landmarks(frame, pose_landmarks_list, person_mem):
+    h, w, _ = frame.shape
+    for idx, pose_landmarks in enumerate(pose_landmarks_list):
+        pts = {}
+        for i, lm in enumerate(pose_landmarks):
+            cx, cy = int(lm.x * w), int(lm.y * h)
+            pts[i] = (cx, cy)
+            cv2.circle(frame, (cx, cy), 3, (0, 255, 0), -1)
 
-    for fourcc_str, ext in candidates:
-        # output_path extensionini almashtirish
-        base = os.path.splitext(output_path)[0]
-        actual_path = base + ext
+        for connection in POSE_CONNECTIONS:
+            if connection[0] in pts and connection[1] in pts:
+                cv2.line(frame, pts[connection[0]], pts[connection[1]], (255, 255, 255), 1)
+        
+        # Telefon borligini vizual ko'rsatish
+        color = (0, 0, 255) if person_mem[idx]["has_item"] else (255, 255, 255)
+        status = " (MOBILE DETECTED)" if person_mem[idx]["has_item"] else ""
+        if 0 in pts:
+            cv2.putText(frame, f"Person {idx+1}{status}", (pts[0][0], pts[0][1]-20), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-        fourcc = cv2.VideoWriter_fourcc(*fourcc_str)
-        writer = cv2.VideoWriter(actual_path, fourcc, fps, (w, h))
-
-        if not writer.isOpened():
-            writer.release()
-            continue
-
-        for f in frames:
-            writer.write(f)
-        writer.release()
-
-        # Fayl hajmi tekshiruvi — 0 byte bo'lsa codec ishlamagan
-        if os.path.exists(actual_path) and os.path.getsize(actual_path) > 1000:
-            print(f"✅ Video yozildi: {actual_path}  "
-                  f"({len(frames)} kadr, codec={fourcc_str})")
-            return actual_path
-
-        # Muvaffaqiyatsiz bo'lsa faylni o'chirish
-        if os.path.exists(actual_path):
-            os.remove(actual_path)
-
-    print("❌ Hech qaysi codec bilan video yozib bo'lmadi.")
-    return False
-
-
-def send_video_to_backend(video_path, extra_data=None, max_retries=3):
-    """
-    Videoni Django backendga multipart/form-data orqali yuboradi.
-    Muvaffaqiyatsiz bo'lsa max_retries marta qayta urinadi.
-    """
-    if not video_path or not os.path.exists(video_path):
-        print("❌ Yuborish uchun video fayl topilmadi.")
-        return False
-
-    file_size = os.path.getsize(video_path)
-    print(f"📤 Video yuborilmoqda: {video_path}  ({file_size / 1024:.1f} KB)")
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            with open(video_path, 'rb') as f:
-                # Django backend qabul qiladigan format:
-                # POST request — multipart/form-data
-                files = {
-                    'video_clip': (
-                        os.path.basename(video_path),
-                        f,
-                        'video/mp4'   # Content-Type
-                    )
-                }
-                data = extra_data or {
-                    'alert_type': 'cash_exchange',
-                    'confidence':  'high',
-                    'timestamp':   str(int(time.time())),
-                }
-                response = requests.post(
-                    BACKEND_CREATE_URL,
-                    files=files,
-                    data=data,
-                    timeout=60   # katta video uchun 60 soniya
-                )
-
-            if response.status_code in (200, 201):
-                print(f"🚀 Backend qabul qildi! "
-                      f"Status: {response.status_code}  "
-                      f"Javob: {response.text[:200]}")
-                return True
-            else:
-                print(f"⚠️  Backend xato qaytardi "
-                      f"({attempt}/{max_retries}): "
-                      f"Status={response.status_code}  "
-                      f"Javob={response.text[:200]}")
-
-        except requests.exceptions.ConnectionError:
-            print(f"❌ Backend bilan aloqa yo'q "
-                  f"({attempt}/{max_retries}). "
-                  f"URL: {BACKEND_CREATE_URL}")
-        except requests.exceptions.Timeout:
-            print(f"⏱️  Timeout ({attempt}/{max_retries}). "
-                  f"Video juda katta yoki server sekin.")
-        except Exception as e:
-            print(f"❌ Kutilmagan xato ({attempt}/{max_retries}): {e}")
-
-        if attempt < max_retries:
-            time.sleep(2 * attempt)   # 2s, 4s, ...
-
-    print("❌ Video backendga yuborib bo'lmadi.")
-    return False
-
-
-def save_and_send_async(frames_snapshot, fps):
-    """
-    Video yozish va yuborishni alohida thread'da bajaradi —
-    asosiy kamera siklini bloklamaydi.
-    """
+def save_and_send_async(frames_to_save, fps):
     def _worker():
-        # Vaqtinchalik fayl — tizim temp papkasida
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            prefix=f"alert_{int(time.time())}_",
-            suffix='.mp4'
-        )
-        os.close(tmp_fd)   # VideoWriter o'zi ochadi
-
+        if not frames_to_save: return
+        tmp_path = os.path.join(tempfile.gettempdir(), f"alert_{int(time.time())}.mp4")
+        h, w = frames_to_save[0].shape[:2]
+        fourcc = cv2.VideoWriter_fourcc(*'avc1')
+        out = cv2.VideoWriter(tmp_path, fourcc, fps, (w, h))
+        for f in frames_to_save: out.write(f)
+        out.release()
         try:
-            actual_path = write_video_to_file(frames_snapshot, fps, tmp_path)
-            if actual_path:
-                send_video_to_backend(actual_path)
+            with open(tmp_path, 'rb') as f:
+                requests.post(BACKEND_CREATE_URL, files={'video_clip': f}, timeout=60)
+            print("🚀 Video isboti backendga yuborildi.")
+        except Exception as e: print(f"❌ Xato: {e}")
         finally:
-            # Vaqtinchalik fayllarni tozalash
-            for p in [tmp_path, actual_path if 'actual_path' in dir() else None]:
-                if p and os.path.exists(p):
-                    try:
-                        os.remove(p)
-                    except Exception:
-                        pass
+            if os.path.exists(tmp_path): os.remove(tmp_path)
 
-    t = threading.Thread(target=_worker, daemon=True)
-    t.start()
+    threading.Thread(target=_worker, daemon=True).start()
 
 # ============================================================
-# 5. POSE / QO'L YAQINLIGI ANIQLASH
-# ============================================================
-
-# MediaPipe Pose landmark indekslari — QO'L / BILAK
-# https://developers.google.com/mediapipe/solutions/vision/pose_landmarker
-WRIST_LEFT   = 15   # chap bilek
-WRIST_RIGHT  = 16   # o'ng bilek
-PINKY_LEFT   = 17
-INDEX_LEFT   = 19
-THUMB_LEFT   = 21
-PINKY_RIGHT  = 18
-INDEX_RIGHT  = 20
-THUMB_RIGHT  = 22
-
-HAND_LANDMARKS = [
-    WRIST_LEFT, WRIST_RIGHT,
-    PINKY_LEFT, PINKY_RIGHT,
-    INDEX_LEFT, INDEX_RIGHT,
-    THUMB_LEFT, THUMB_RIGHT,
-]
-
-
-def get_hand_points(pose_landmarks, frame_shape):
-    """
-    Bir kishi uchun qo'l nuqtalarini piksel koordinatasiga aylantiradi.
-    """
-    fh, fw = frame_shape[:2]
-    points = []
-    for idx in HAND_LANDMARKS:
-        if idx < len(pose_landmarks):
-            lm = pose_landmarks[idx]
-            # visibility tekshiruvi — ko'rinmayotgan nuqtalarni o'tkazib yuborish
-            if hasattr(lm, 'visibility') and lm.visibility < 0.3:
-                continue
-            points.append((int(lm.x * fw), int(lm.y * fh)))
-    return points
-
-
-def is_hand_in_box(hand_points, box):
-    """
-    Qo'l nuqtalaridan birortasi bounding box ichidami?
-    """
-    x1, y1, x2, y2 = box
-    # Box'ni biroz kengaytirish (margin)
-    margin = 20
-    x1m, y1m = x1 - margin, y1 - margin
-    x2m, y2m = x2 + margin, y2 + margin
-    for (cx, cy) in hand_points:
-        if x1m <= cx <= x2m and y1m <= cy <= y2m:
-            return True
-    return False
-
-
-def hands_distance(points_a, points_b):
-    """
-    Ikki kishi qo'llari orasidagi minimal masofa (piksel).
-    """
-    if not points_a or not points_b:
-        return float('inf')
-    min_dist = float('inf')
-    for (ax, ay) in points_a:
-        for (bx, by) in points_b:
-            d = ((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5
-            if d < min_dist:
-                min_dist = d
-    return min_dist
-
-# ============================================================
-# 6. ASOSIY SIKL
+# 4. ASOSIY SIKL
 # ============================================================
 
 def main():
+    fetch_zones()
     cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("❌ Kamera ochilmadi.")
-        return
-
-    # Haqiqiy FPS ni o'lchash
-    cap.set(cv2.CAP_PROP_FPS, FPS)
-    actual_fps = cap.get(cv2.CAP_PROP_FPS) or FPS
-    print(f"📷 Kamera FPS: {actual_fps}")
-
-    last_alert_time  = 0
-    last_verify_time = 0
-
-    # POST-event kadrlarini yozib olish uchun
-    post_recording        = False
+    last_alert_time = 0
+    post_recording = False
     post_frames_remaining = 0
     alert_frames_snapshot = []
 
-    print("🟢 Monitoring boshlandi. Chiqish uchun 'q' bosing.\n")
+    print("🟢 Monitoring ishga tushdi...")
 
     while cap.isOpened():
         success, frame = cap.read()
-        if not success:
-            print("⚠️  Kameradan kadr olinmadi.")
-            time.sleep(0.05)
-            continue
+        if not success: break
 
         frame = cv2.flip(frame, 1)
         current_time = time.time()
+        h, w, _ = frame.shape
+        
+        # 1. MediaPipe Tahlili
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+        pose_res = landmarker.detect_for_video(mp_image, int(current_time * 1000))
+        
+        # 2. YOLO: Ob'ektlar
+        yolo_res = yolo_model(frame, verbose=False)
+        item_boxes = []
+        for r in yolo_res:
+            for box in r.boxes:
+                if int(box.cls[0]) in TRIGGER_CLASSES and float(box.conf[0]) > CONFIDENCE_THRESHOLD:
+                    b = list(map(int, box.xyxy[0]))
+                    item_boxes.append(b)
+                    cv2.rectangle(frame, (b[0], b[1]), (b[2], b[3]), (0, 165, 255), 2) # To'q sariq: telefon
 
-        # --- Buffer'ga yozish ---
+        # 3. Mantiqiy ishlov berish
+        alert_triggered = False
+        person_hands = [] # [(person_idx, left_hand, right_hand, hips_y)]
+
+        if pose_res.pose_landmarks:
+            for idx, pose in enumerate(pose_res.pose_landmarks):
+                # Nuqtalar koordinatalari
+                lw = (int(pose[15].x * w), int(pose[15].y * h)) # Chap bilak
+                rw = (int(pose[16].x * w), int(pose[16].y * h)) # O'ng bilak
+                hip_y = int(pose[23].y * h) # Bel chizig'i (cho'ntak darajasi)
+                
+                person_hands.append((idx, lw, rw, hip_y))
+
+                # --- PERSISTENCE LOGIC (Xotirada saqlash) ---
+                # Agar birorta telefon qutisi qo'llardan biriga yaqin bo'lsa, has_item = True
+                for box in item_boxes:
+                    bx, by = (box[0]+box[2])//2, (box[1]+box[3])//2
+                    if np.hypot(bx-lw[0], by-lw[1]) < 70 or np.hypot(bx-rw[0], by-rw[1]) < 70:
+                        person_memory[idx]["has_item"] = True
+                        person_memory[idx]["last_seen"] = current_time
+
+                # --- RESET LOGIC (Cho'ntakka solish) ---
+                # Agar telefonli odam qo'lini belidan pastga tushirsa, telefon yo'qolgan deb hisoblaymiz
+                if person_memory[idx]["has_item"]:
+                    if lw[1] > hip_y + 30 and rw[1] > hip_y + 30:
+                        person_memory[idx]["has_item"] = False # Cho'ntakka tushdi
+
+            # Skeletni chizish
+            draw_manual_landmarks(frame, pose_res.pose_landmarks, person_memory)
+
+        # 4. TRANSFER DETECTION (Uzatishni aniqlash)
+        # Ikki xil odam qo'llari bir-biriga yaqinlashsa va birida telefon bo'lsa
+        for i in range(len(person_hands)):
+            for j in range(i + 1, len(person_hands)):
+                idx1, lw1, rw1, _ = person_hands[i]
+                idx2, lw2, rw2, _ = person_hands[j]
+
+                # Masofalar kombinatsiyasi
+                dists = [
+                    np.hypot(lw1[0]-lw2[0], lw1[1]-lw2[1]),
+                    np.hypot(lw1[0]-rw2[0], lw1[1]-rw2[1]),
+                    np.hypot(rw1[0]-lw2[0], rw1[1]-lw2[1]),
+                    np.hypot(rw1[0]-rw2[0], rw1[1]-rw2[1])
+                ]
+
+                if min(dists) < 80: # Qo'llar kontaktda
+                    # Agar birida telefon bo'lgan bo'lsa (Persistence tufayli ishlaydi)
+                    if person_memory[idx1]["has_item"] or person_memory[idx2]["has_item"]:
+                        # Kassa zonasi tekshiruvi
+                        cx, cy = (lw1[0]+lw2[0])//2, (lw1[1]+lw2[1])//2
+                        in_cashier = any(is_inside_zone(cx, cy, z['coordinates']) 
+                                         for z in camera_zones if z['zone_type'] == 'cashier')
+                        
+                        if in_cashier:
+                            alert_triggered = True
+                            cv2.putText(frame, "!!! ITEM TRANSFER DETECTED !!!", (cx-100, cy-50), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 3)
+
+        # 5. Zonalar chizmasi
+        for zone in camera_zones:
+            zone_pts = np.array([[p['x'], p['y']] for p in zone['coordinates']], np.int32).reshape((-1, 1, 2))
+            color = (0, 255, 255) if zone['zone_type'] == 'cashier' else (255, 255, 0)
+            cv2.polylines(frame, [zone_pts], True, color, 2)
+            cv2.putText(frame, zone['name'], (zone_pts[0][0][0], zone_pts[0][0][1]-10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+        # 6. Buffer va Recording
         frame_buffer.append(frame.copy())
 
-        # --- POST-event yozuvi davom etayotgan bo'lsa ---
+        if alert_triggered and (current_time - last_alert_time > COOLDOWN_PERIOD):
+            if not post_recording:
+                print("🚨 ALERT: Telefon/Pul uzatildi!")
+                last_alert_time = current_time
+                alert_frames_snapshot = list(frame_buffer)
+                post_recording = True
+                post_frames_remaining = POST_SECONDS * FPS
+
         if post_recording:
             alert_frames_snapshot.append(frame.copy())
             post_frames_remaining -= 1
-            cv2.putText(frame, f"⏺ REC ({post_frames_remaining})",
-                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             if post_frames_remaining <= 0:
                 post_recording = False
-                print(f"💾 Jami {len(alert_frames_snapshot)} kadr saqlandi. "
-                      f"Yuborish boshlanyapti...")
-                save_and_send_async(alert_frames_snapshot.copy(), int(actual_fps))
+                save_and_send_async(alert_frames_snapshot, FPS)
                 alert_frames_snapshot = []
 
-        # --- YOLO: Obyekt aniqlash ---
-        yolo_results = yolo_model(frame, verbose=False)
-        detected_boxes = []
-        for result in yolo_results:
-            for box in result.boxes:
-                cls_id = int(box.cls[0])
-                conf   = float(box.conf[0])
-                if cls_id in TRIGGER_CLASSES and conf > CONFIDENCE_THRESHOLD:
-                    coords = list(map(int, box.xyxy[0]))
-                    detected_boxes.append((coords, conf, cls_id))
-                    # Qizil ramka
-                    cv2.rectangle(frame,
-                                  (coords[0], coords[1]),
-                                  (coords[2], coords[3]),
-                                  (0, 0, 255), 2)
-                    cv2.putText(frame,
-                                f"cls:{cls_id} {conf:.2f}",
-                                (coords[0], coords[1] - 8),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-
-        # --- MediaPipe: Skelet aniqlash ---
-        rgb_frame  = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image   = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-        ts_ms      = int(current_time * 1000)
-        pose_result = landmarker.detect_for_video(mp_image, ts_ms)
-
-        # Har bir kishi uchun qo'l nuqtalarini olish
-        all_hand_points = []
-        if pose_result.pose_landmarks:
-            for pose_lms in pose_result.pose_landmarks:
-                pts = get_hand_points(pose_lms, frame.shape)
-                all_hand_points.append(pts)
-                # Qo'l nuqtalarini ko'k doira bilan ko'rsatish (debug)
-                for (cx, cy) in pts:
-                    cv2.circle(frame, (cx, cy), 5, (255, 100, 0), -1)
-
-        # --- Uzatish mantiqini tekshirish ---
-        alert_triggered = False
-
-        for (box, conf, cls_id) in detected_boxes:
-
-            # Usul 1: Obyekt atrofida kamida 2 kishining qo'li bor
-            hands_in_box = [
-                pts for pts in all_hand_points
-                if is_hand_in_box(pts, box)
-            ]
-            if len(hands_in_box) >= 2:
-                alert_triggered = True
-                cv2.rectangle(frame,
-                              (box[0], box[1]), (box[2], box[3]),
-                              (0, 255, 0), 3)
-                cv2.putText(frame, "✅ UZATISH ANIQLANDI!",
-                            (box[0], box[1] - 15),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-
-        # Usul 2: Ikki kishi qo'llari bir-biriga yaqin (ob'ektsiz uzatish)
-        if len(all_hand_points) >= 2 and not alert_triggered:
-            dist = hands_distance(all_hand_points[0], all_hand_points[1])
-            if dist < 80:   # 80 pikseldan yaqin = qo'l-qo'l kontakt
-                alert_triggered = True
-                cv2.putText(frame, f"✅ QO'L KONTAKT! ({dist:.0f}px)",
-                            (10, 70),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 100), 2)
-
-        # --- Alert ishga tushirish ---
-        if alert_triggered and (current_time - last_alert_time > COOLDOWN_PERIOD):
-            if not post_recording:
-                print(f"\n🚨 UZATISH ANIQLANDI! Video yozilmoqda...")
-                last_alert_time = current_time
-
-                # Pre-event kadrlar (buffer'dan)
-                alert_frames_snapshot = list(frame_buffer)
-
-                # Post-event yozuvini boshlash
-                post_recording        = True
-                post_frames_remaining = int(POST_SECONDS * actual_fps)
-
-        # --- Cooldown holati ko'rsatish ---
-        remaining_cooldown = COOLDOWN_PERIOD - (current_time - last_alert_time)
-        if remaining_cooldown > 0 and last_alert_time > 0:
-            cd_text = f"⏳ Cooldown: {remaining_cooldown:.0f}s"
-            cv2.putText(frame, cd_text, (10, frame.shape[0] - 15),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 0), 1)
-
-        # --- Odamlar soni ko'rsatish ---
-        person_count = len(pose_result.pose_landmarks) if pose_result.pose_landmarks else 0
-        cv2.putText(frame, f"Odamlar: {person_count}",
-                    (10, frame.shape[0] - 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
-
-        # --- Backend tekshiruvi (payment confirmed?) ---
-        if current_time - last_verify_time > VERIFY_INTERVAL:
-            def _check():
-                try:
-                    r = requests.get(BACKEND_VERIFY_URL, timeout=5)
-                    print(f"🔍 Backend check: {r.status_code}")
-                except Exception:
-                    pass
-            threading.Thread(target=_check, daemon=True).start()
-            last_verify_time = current_time
-
-        # --- Oynani ko'rsatish ---
-        cv2.imshow("🏨 Hotel Security Monitor", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            print("\n🛑 Foydalanuvchi tomonidan to'xtatildi.")
-            break
+        cv2.imshow("Smart Hotel Security AI", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
 
     cap.release()
-    landmarker.close()
     cv2.destroyAllWindows()
-    print("✅ Dastur yopildi.")
-
 
 if __name__ == "__main__":
     main()

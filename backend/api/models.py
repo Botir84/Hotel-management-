@@ -97,3 +97,29 @@ class SecurityAlert(models.Model):
 
     def __str__(self):
         return f"Ogohlantirish {self.id} - {self.get_status_display()} ({self.detected_at.strftime('%H:%M')})"
+
+
+
+class CameraZone(models.Model):
+    ZONE_TYPES = (
+        ('cashier', 'Kassa hududi'),
+        ('entry', 'Kirish eshigi'),
+        ('corridor', 'Yo\'lak'),
+        ('storage', 'Omborxona'),
+    )
+
+    name = models.CharField(max_length=100) # Masalan: "1-kassa"
+    zone_type = models.CharField(max_length=20, choices=ZONE_TYPES)
+    
+    # Koordinatalarni JSON formatida saqlaymiz: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+    # Bu bizga nafaqat to'rtburchak, balki ixtiyoriy shakllarni chizish imkonini beradi
+    coordinates = models.JSONField(help_text="Zonaning nuqtalar koordinatalari")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.get_zone_type_display()})"
+
+    class Meta:
+        verbose_name = "Kamera Zonasi"
+        verbose_name_plural = "Kamera zonalari"
