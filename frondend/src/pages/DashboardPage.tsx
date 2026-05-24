@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { Room, Reservation } from '../types';
 import api, { roomService } from '../services/api';
+import { useLang } from '../contexts/LanguageContext';
 
 // Komponentlar
 import { MetricsCards } from '../components/dashboard/MetricsCards';
@@ -13,6 +14,7 @@ import { RoomDetailsModal } from '../components/dashboard/RoomDetailsModal';
 import { useTheme } from '../contexts/ThemeContext';
 
 export function DashboardPage() {
+  const { t } = useLang();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [checkins, setCheckins] = useState<Reservation[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<Room | undefined>();
@@ -99,10 +101,10 @@ export function DashboardPage() {
       <div className="flex items-center justify-between px-1">
         <div>
           <h1 className={`text-2xl md:text-3xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Boshqaruv Paneli
+            {t('dashboard_title')}
           </h1>
           <p className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
-            Xonalar va Bandlik Monitoringi
+            {t('dashboard_subtitle')}
           </p>
         </div>
 

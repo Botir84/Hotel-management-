@@ -80,4 +80,20 @@ export const securityService = {
     updateAlertStatus: (id: number, status: string) => api.patch(`/security-alerts/${id}/`, { status }),
 };
 
+export const cameraService = {
+    // Barcha zonalarni ro'yxatini olish
+    getZones: () => api.get('/camera-zones/'),
+
+    // Yangi zona yaratish (React'da chizilgan koordinatalarni yuborish)
+    saveZone: (data: { name: string; zone_type: string; coordinates: any }) =>
+        api.post('/camera-zones/', data),
+
+    // Mavjud zonani tahrirlash
+    updateZone: (id: number, data: any) =>
+        api.patch(`/camera-zones/${id}/`, data),
+
+    // Zonani o'chirish
+    deleteZone: (id: number) =>
+        api.delete(`/camera-zones/${id}/`),
+};
 export default api;

@@ -1,24 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BedDouble } from 'lucide-react';
 import {
-  LayoutGrid,
-  ShieldAlert,
-  Users,
-  Hotel,
-  CircleDollarSign,
-  LogOut,
-  User,
-  Sun,
-  Moon,
-  Globe,
-  ChevronUp
+  LayoutGrid, ShieldAlert, Users, Hotel, CircleDollarSign,
+  LogOut, User, Sun, Moon, Globe, ChevronUp, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Page } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAlerts } from '../../contexts/AlertContext';
-import { profileService } from '../../services/api';   // ← added
+import { profileService } from '../../services/api';
+import { useLang, Lang } from '../../contexts/LanguageContext';
 
 interface SidebarProps {
   currentPage: Page;
@@ -27,7 +20,7 @@ interface SidebarProps {
 
 interface NavItem {
   id: Page;
-  label: string;
+  labelKey: string;
   icon: React.ReactNode;
   adminOnly?: boolean;
   badge?: number;
@@ -35,16 +28,23 @@ interface NavItem {
 
 const API_BASE_URL = 'http://127.0.0.1:8000';
 
+const LANG_OPTIONS: { value: Lang; label: string; flag: string }[] = [
+  { value: 'uz', label: "O'zbekcha", flag: '🇺🇿' },
+  { value: 'ru', label: 'Русский', flag: '🇷🇺' },
+  { value: 'en', label: 'English', flag: '🇬🇧' },
+];
+
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const navigate = useNavigate();
   const { isAdmin, user, signOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const { incidents } = useAlerts();
+  const { lang, setLang, t } = useLang();
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isLangOpen, setIsLangOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ── Avatar state fetched fresh from profile API ──────────────────
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState('');
 
@@ -52,19 +52,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     profileService.getProfile()
       .then((res) => {
         const data = res.data;
-
-        // Build full avatar URL
         let url: string | null = data.avatar || null;
         if (url && !url.startsWith('http')) {
           url = `${API_BASE_URL}${url.startsWith('/') ? url : '/' + url}`;
         }
         setAvatarUrl(url);
-
-        // Display name
         setDisplayName(data.first_name || data.username || '');
       })
       .catch(() => {
-        // fallback — use whatever auth context has
         const raw = user?.avatar || null;
         if (raw && !raw.startsWith('http')) {
           setAvatarUrl(`${API_BASE_URL}${raw.startsWith('/') ? raw : '/' + raw}`);
@@ -73,9 +68,8 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         }
         setDisplayName(user?.first_name || user?.username || '');
       });
-  }, []);   // runs once on mount; re-runs if page triggers a re-mount after profile save
+  }, []);
 
-  // ── Helpers ──────────────────────────────────────────────────────
   const getInitials = () => {
     if (displayName) return displayName[0].toUpperCase();
     return user?.username?.slice(0, 2).toUpperCase() || 'U';
@@ -85,6 +79,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsProfileOpen(false);
+        setIsLangOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -94,15 +89,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const unresolvedIncidents = incidents ? incidents.filter(i => !i.investigated).length : 0;
 
   const navItems: NavItem[] = [
-    { id: 'dashboard', label: 'Reception', icon: <LayoutGrid size={22} /> },
-    { id: 'revenue', label: 'Revenue', icon: <CircleDollarSign size={22} />, adminOnly: true, badge: unresolvedIncidents },
-    { id: 'employees', label: 'Staff', icon: <Users size={22} />, adminOnly: true },
-    { id: 'security', label: 'Security', icon: <ShieldAlert size={22} />, adminOnly: true },
+    { id: 'dashboard', labelKey: 'nav_reception', icon: <LayoutGrid size={22} /> },
+    { id: 'revenue', labelKey: 'nav_revenue', icon: <CircleDollarSign size={22} />, adminOnly: true, badge: unresolvedIncidents },
+    { id: 'rooms', labelKey: 'nav_rooms', icon: <BedDouble size={22} />, adminOnly: true },
+    { id: 'security', labelKey: 'nav_security', icon: <ShieldAlert size={22} />, adminOnly: true },
   ];
 
   const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
-  // ── Style tokens ─────────────────────────────────────────────────
   const bgClass = isDark
     ? 'bg-[#0f172a]/80 backdrop-blur-lg border-white/5'
     : 'bg-white/80 backdrop-blur-lg border-slate-200 shadow-2xl';
@@ -113,7 +107,6 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     ? 'bg-[#5D7B93]/20 text-white'
     : 'bg-[#5D7B93]/10 text-[#5D7B93]';
 
-  // ── Reusable avatar element ───────────────────────────────────────
   const AvatarCircle = ({ size = 40, border = true }: { size?: number; border?: boolean }) => (
     <div
       style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}
@@ -150,7 +143,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           transition-[width] duration-700 ease-[cubic-bezier(0.25,1,0.5,1)]
           will-change-[width] flex-col overflow-hidden
         `}
-        onMouseLeave={() => setIsProfileOpen(false)}
+        onMouseLeave={() => { setIsProfileOpen(false); setIsLangOpen(false); }}
       >
         {/* 1. Logo */}
         <div className="flex items-center gap-4 px-5 py-8 h-24 relative overflow-hidden shrink-0">
@@ -194,7 +187,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   {item.icon}
                 </span>
                 <span className="relative z-10 flex-1 text-sm font-bold tracking-tight whitespace-nowrap transition-all duration-500 opacity-0 group-hover:opacity-100 translate-x-[-12px] group-hover:translate-x-0">
-                  {item.label}
+                  {t(item.labelKey as any)}
                 </span>
                 {item.badge != null && item.badge > 0 && (
                   <span className="relative z-10 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300">
@@ -238,6 +231,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   toggleTheme={toggleTheme}
                   isDark={isDark}
                   signOut={signOut}
+                  lang={lang}
+                  setLang={setLang}
+                  isLangOpen={isLangOpen}
+                  setIsLangOpen={setIsLangOpen}
+                  t={t}
                 />
               </motion.div>
             )}
@@ -251,10 +249,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 : 'hover:bg-slate-500/5'
               }`}
           >
-            {/* Avatar — always visible (collapsed & expanded) */}
             <AvatarCircle size={40} border={true} />
-
-            {/* Name + role — visible only when expanded */}
             <div className="flex-1 text-left overflow-hidden opacity-0 group-hover:opacity-100 transition-all duration-500">
               <p className={`text-sm font-black truncate ${isDark ? 'text-white' : 'text-slate-800'}`}>
                 {displayName || user?.username}
@@ -288,7 +283,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-[#5D7B93]/10 scale-110' : ''}`}>
                   {item.icon}
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-tighter">{item.label}</span>
+                <span className="text-[10px] font-bold uppercase tracking-tighter">{t(item.labelKey as any)}</span>
               </button>
             );
           })}
@@ -304,7 +299,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             >
               <AvatarCircle size={32} border={false} />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-tighter">Profil</span>
+            <span className="text-[10px] font-bold uppercase tracking-tighter">{t('nav_profile')}</span>
           </button>
         </div>
 
@@ -334,6 +329,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   toggleTheme={toggleTheme}
                   isDark={isDark}
                   signOut={signOut}
+                  lang={lang}
+                  setLang={setLang}
+                  isLangOpen={isLangOpen}
+                  setIsLangOpen={setIsLangOpen}
+                  t={t}
                 />
               </div>
             </motion.div>
@@ -344,17 +344,22 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   );
 }
 
-function ProfileMenuItems({ navigate, setIsProfileOpen, toggleTheme, isDark, signOut }: any) {
+// ── ProfileMenuItems ──────────────────────────────────────────────────────────
+function ProfileMenuItems({ navigate, setIsProfileOpen, toggleTheme, isDark, signOut, lang, setLang, isLangOpen, setIsLangOpen, t }: any) {
+  const currentLang = LANG_OPTIONS.find(l => l.value === lang);
+
   return (
     <div className="space-y-1 py-1">
+      {/* Profil */}
       <button
         onClick={() => { navigate('/profile'); setIsProfileOpen(false); }}
         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all"
       >
         <User size={18} className="text-[#5D7B93]" />
-        <span>Mening profilim</span>
+        <span>{t('my_profile')}</span>
       </button>
 
+      {/* Tema */}
       <button
         onClick={toggleTheme}
         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all"
@@ -363,22 +368,58 @@ function ProfileMenuItems({ navigate, setIsProfileOpen, toggleTheme, isDark, sig
           ? <Sun size={18} className="text-amber-400" />
           : <Moon size={18} className="text-indigo-500" />
         }
-        <span>{isDark ? 'Kunduzgi rejim' : 'Tungi rejim'}</span>
+        <span>{isDark ? t('theme_light') : t('theme_dark')}</span>
       </button>
 
-      <button className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all">
-        <Globe size={18} className="text-emerald-500" />
-        <span>O'zbekcha</span>
-      </button>
+      {/* Til tanlash */}
+      <div className="relative">
+        <button
+          onClick={() => setIsLangOpen((p: boolean) => !p)}
+          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all"
+        >
+          <span className="text-lg">{currentLang?.flag}</span>
+          <span>{t('language')}</span>
+          <span className="ml-auto text-xs font-black text-[#5D7B93] uppercase">{lang}</span>
+        </button>
+
+        {/* Til dropdown */}
+        <AnimatePresence>
+          {isLangOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 4 }}
+              className={`absolute bottom-full left-0 mb-1 w-48 rounded-2xl border shadow-2xl py-2 z-[120]
+                ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}
+            >
+              {LANG_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setLang(opt.value); setIsLangOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold transition-all
+                    ${lang === opt.value
+                      ? 'text-[#5D7B93] bg-[#5D7B93]/10'
+                      : isDark ? 'text-slate-300 hover:bg-white/5' : 'text-slate-600 hover:bg-slate-50'}`}
+                >
+                  <span className="text-lg">{opt.flag}</span>
+                  <span>{opt.label}</span>
+                  {lang === opt.value && <Check size={14} className="ml-auto text-[#5D7B93]" />}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       <div className="h-px bg-slate-500/10 my-2 mx-2" />
 
+      {/* Chiqish */}
       <button
         onClick={signOut}
         className="w-full flex items-center gap-3 px-4 py-3 text-sm font-black text-red-500 rounded-2xl hover:bg-red-500/10 transition-all"
       >
         <LogOut size={18} />
-        <span>Chiqish</span>
+        <span>{t('logout')}</span>
       </button>
     </div>
   );

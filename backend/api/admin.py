@@ -12,7 +12,7 @@ from .models import Profile
 # 1. Xonalar uchun chiroyli ko'rinish
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
-    list_display = ('id', 'number', 'status') # Admin panelda qaysi ustunlar ko'rinsin
+    list_display = ('id', 'number', 'status', 'tuya_device_id', 'door_status', 'door_last_updated') # Admin panelda qaysi ustunlar ko'rinsin
     list_editable = ('status',) # Ro'yxatning o'zida statusni o'zgartirish imkoniyati
     search_fields = ('number',)
 

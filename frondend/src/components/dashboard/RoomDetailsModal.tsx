@@ -1,8 +1,10 @@
+import { createPortal } from 'react-dom';
 import { X, LogOut, Loader2, Calendar, UserCheck, ReceiptText, Edit3, Save, Clock, ArrowRight, TrendingUp, Banknote, CreditCard, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import api, { roomService } from '../../services/api';
 import { Reservation, Room } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useLang } from '../../contexts/LanguageContext';
 
 interface RoomDetailsModalProps {
     isOpen: boolean;
@@ -55,6 +57,8 @@ const getDaysDiff = (from: string, to: string): number => {
 
 export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess }: RoomDetailsModalProps) {
     const { isDark } = useTheme();
+    const { t } = useLang();
+
     const [loading, setLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
@@ -116,7 +120,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
             setIsEditing(false);
             onSuccess();
         } catch (error) {
-            alert("Error updating information!");
+            alert(t('save'));
         } finally {
             setLoading(false);
         }
@@ -124,8 +128,8 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
 
     const handleCheckout = async () => {
         if (!reservation || !room) return;
-        let confirmMessage = `Confirm checkout for Room №${room.number}?`;
-        if (lateStatus.lateHours > 0) confirmMessage = `⚠️ LATE CHECKOUT! Penalty: $${lateStatus.penalty}. Has payment been received?`;
+        let confirmMessage = `${t('checkout_confirm')} №${room.number}?`;
+        if (lateStatus.lateHours > 0) confirmMessage = `⚠️ ${t('late_checkout')}! ${t('penalty')}: $${lateStatus.penalty}`;
         if (!window.confirm(confirmMessage)) return;
 
         setLoading(true);
@@ -143,33 +147,41 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
             }
             onSuccess();
             onClose();
-        } catch (error) { alert("Checkout error!"); } finally { setLoading(false); }
+        } catch (error) {
+            alert(t('checkout_label'));
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (!isOpen || !room) return null;
+
     const totalPaid = reservation?.payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
 
     const inputClass = `w-full px-5 py-3.5 rounded-2xl text-sm border transition-all outline-none backdrop-blur-md 
     ${isDark
             ? 'bg-white/5 border-white/10 text-slate-100 focus:border-[#5D7B93] focus:ring-4 focus:ring-[#5D7B93]/10'
-            : 'bg-slate-50/50 border-slate-200 text-slate-800 focus:border-[#5D7B93] focus:ring-4 focus:ring-[#5D7B93]/10'
-        }`;
+            : 'bg-slate-50/50 border-slate-200 text-slate-800 focus:border-[#5D7B93] focus:ring-4 focus:ring-[#5D7B93]/10'}`;
 
     const labelClass = `block text-[10px] font-black mb-2 uppercase tracking-[0.15em] ${isDark ? 'text-slate-400' : 'text-[#5D7B93]'}`;
 
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md">
+    return createPortal(
+        <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+            background: 'rgba(2,6,23,0.85)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        }}>
             <div className={`${isDark ? 'bg-[#1e293b]' : 'bg-white'} border ${isDark ? 'border-white/10' : 'border-slate-200'} w-full max-w-5xl rounded-[2.5rem] shadow-2xl overflow-hidden flex h-[85vh] transition-all`}>
 
-                {/* LEFT SIDE: Visual Panel */}
+                {/* LEFT SIDE */}
                 <div className="w-[40%] relative overflow-hidden hidden md:block">
                     <img
                         src={room.image || "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&q=80"}
                         alt="Room"
                         className="absolute inset-0 w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-transparent" />
-
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #0f172a 0%, rgba(15,23,42,0.5) 50%, rgba(15,23,42,0.3) 100%)' }} />
                     <div className="absolute bottom-10 left-10 right-10">
                         <div className="flex items-center gap-2 mb-3">
                             <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-widest rounded-full border border-white/30">
@@ -177,29 +189,35 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                             </span>
                             {room.status === 'occupied' && (
                                 <span className="px-3 py-1 bg-emerald-500/80 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-widest rounded-full">
-                                    Occupied
+                                    {t('occupied')}
                                 </span>
                             )}
                         </div>
-                        <h2 className="text-4xl font-black text-white leading-tight mb-2">Room №{room.number}</h2>
+                        <h2 className="text-4xl font-black text-white leading-tight mb-2">{t('room_label')} №{room.number}</h2>
                         <p className="text-slate-300 text-sm font-medium opacity-80 leading-relaxed italic">
-                            "{reservation?.notes || 'Providing premium service for our guests is our top priority.'}"
+                            "{reservation?.notes || t('room_service_note')}"
                         </p>
                     </div>
                 </div>
 
-                {/* RIGHT SIDE: Content Panel */}
+                {/* RIGHT SIDE */}
                 <div className="flex-1 flex flex-col min-w-0 bg-transparent">
                     {/* Header */}
                     <div className={`px-8 py-7 flex justify-between items-center border-b ${isDark ? 'border-white/5' : 'border-slate-100'} ${isDark ? 'bg-[#5D7B93]/5' : 'bg-slate-50/50'}`}>
                         <div>
                             <div className="flex items-center gap-2 mb-1">
-                                <span className="px-2 py-0.5 bg-[#5D7B93]/10 text-[#5D7B93] text-[9px] font-black uppercase tracking-widest rounded-md border border-[#5D7B93]/20">Room Service</span>
+                                <span className="px-2 py-0.5 bg-[#5D7B93]/10 text-[#5D7B93] text-[9px] font-black uppercase tracking-widest rounded-md border border-[#5D7B93]/20">
+                                    {t('room_service')}
+                                </span>
                                 {lateStatus.lateHours > 0 && !isEditing && (
-                                    <span className="px-2 py-0.5 bg-red-500/10 text-red-500 text-[9px] font-black uppercase tracking-widest rounded-md border border-red-500/20 animate-pulse">Late Alert</span>
+                                    <span className="px-2 py-0.5 bg-red-500/10 text-red-500 text-[9px] font-black uppercase tracking-widest rounded-md border border-red-500/20 animate-pulse">
+                                        {t('late_alert')}
+                                    </span>
                                 )}
                             </div>
-                            <h3 className={`text-2xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-800'}`}>Room Details</h3>
+                            <h3 className={`text-2xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                                {t('room_details')}
+                            </h3>
                         </div>
                         <button onClick={onClose} className={`p-3 rounded-2xl transition-all ${isDark ? 'bg-white/5 hover:bg-white/10 text-slate-400' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}>
                             <X size={20} />
@@ -214,7 +232,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-2 text-emerald-500 mb-1">
                                             <Calendar size={13} />
-                                            <span className="text-[9px] font-black uppercase tracking-tighter">Check In</span>
+                                            <span className="text-[9px] font-black uppercase tracking-tighter">{t('checkin_label')}</span>
                                         </div>
                                         <p className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{formatDateDisplay(reservation?.check_in_date)}</p>
                                         <div className="flex items-center gap-1 opacity-50">
@@ -230,7 +248,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                     <div className="text-right space-y-1">
                                         <div className={`flex items-center gap-2 justify-end mb-1 ${lateStatus.lateHours > 0 ? 'text-red-500' : 'text-orange-400'}`}>
                                             <Clock size={13} />
-                                            <span className="text-[9px] font-black uppercase tracking-tighter">Check Out</span>
+                                            <span className="text-[9px] font-black uppercase tracking-tighter">{t('checkout_label')}</span>
                                         </div>
                                         <p className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{formatDateDisplay(reservation?.check_out_date)}</p>
                                         <div className="flex items-center gap-1 justify-end opacity-50">
@@ -246,11 +264,13 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                         <UserCheck size={22} />
                                     </div>
                                     <div>
-                                        <p className={labelClass}>Guest Name</p>
+                                        <p className={labelClass}>{t('guest_name')}</p>
                                         <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>{reservation?.guest_name}</p>
                                     </div>
                                     <div className="ml-auto">
-                                        <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black border border-emerald-500/20 uppercase">Active</span>
+                                        <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black border border-emerald-500/20 uppercase">
+                                            {t('active')}
+                                        </span>
                                     </div>
                                 </div>
 
@@ -259,10 +279,10 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                     <div className="flex items-center justify-between border-b border-white/5 pb-4">
                                         <div className="flex items-center gap-2 text-[#5D7B93]">
                                             <ReceiptText size={18} />
-                                            <span className="text-[10px] font-black uppercase tracking-widest">Payment History</span>
+                                            <span className="text-[10px] font-black uppercase tracking-widest">{t('payment_history')}</span>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-[9px] uppercase font-bold text-slate-500">Total Paid</p>
+                                            <p className="text-[9px] uppercase font-bold text-slate-500">{t('total_paid')}</p>
                                             <p className="text-xl font-black text-[#5D7B93]">${totalPaid.toLocaleString()}</p>
                                         </div>
                                     </div>
@@ -270,7 +290,9 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                         {reservation?.payments?.length ? reservation.payments.map((p, i) => (
                                             <div key={i} className={`flex justify-between items-center p-3 rounded-xl ${isDark ? 'bg-black/20' : 'bg-white border border-slate-100'}`}>
                                                 <div className="flex flex-col">
-                                                    <span className={`font-black uppercase text-[9px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{p.method === 'cash' ? 'Cash' : 'Card'} Payment</span>
+                                                    <span className={`font-black uppercase text-[9px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                                                        {p.method === 'cash' ? t('payment_cash') : t('payment_card')} {t('payment_label')}
+                                                    </span>
                                                     <span className="text-slate-500 text-[10px]">
                                                         {new Date(p.created_at).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
                                                     </span>
@@ -278,7 +300,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                                 <span className="font-mono font-black text-emerald-500">+${Number(p.amount).toLocaleString()}</span>
                                             </div>
                                         )) : (
-                                            <p className="text-center text-xs text-slate-500 py-4 italic">No payments found</p>
+                                            <p className="text-center text-xs text-slate-500 py-4 italic">{t('no_payments')}</p>
                                         )}
                                     </div>
                                 </div>
@@ -287,15 +309,12 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                             <div className="space-y-6">
                                 {/* Extend Date */}
                                 <div className={`p-6 rounded-[2.5rem] border ${isDark ? 'bg-[#5D7B93]/5 border-[#5D7B93]/20' : 'bg-slate-50 border-slate-200'} space-y-4`}>
-                                    <label className={labelClass}>Extend Stay (Until 12:00 PM)</label>
+                                    <label className={labelClass}>{t('extend_stay')}</label>
                                     <div className="relative">
                                         <Calendar className="absolute left-4 top-4 text-[#5D7B93]" size={18} />
-                                        <input
-                                            type="date"
-                                            className={`${inputClass} pl-12 font-bold`}
+                                        <input type="date" className={`${inputClass} pl-12 font-bold`}
                                             value={editForm.check_out_date}
-                                            onChange={e => setEditForm(prev => ({ ...prev, check_out_date: e.target.value }))}
-                                        />
+                                            onChange={e => setEditForm(prev => ({ ...prev, check_out_date: e.target.value }))} />
                                     </div>
 
                                     {extraChargeInfo && (
@@ -304,27 +323,25 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                                 <div className="flex items-center gap-3 text-emerald-600">
                                                     <TrendingUp size={22} />
                                                     <div>
-                                                        <p className="text-xs font-black uppercase">Extra Duration</p>
-                                                        <p className="text-sm font-bold">+{extraChargeInfo.extraDays} Night(s)</p>
+                                                        <p className="text-xs font-black uppercase">{t('extra_duration')}</p>
+                                                        <p className="text-sm font-bold">+{extraChargeInfo.extraDays} {t('nights')}</p>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <p className="text-[10px] font-bold text-emerald-600 uppercase">Additional Charge</p>
+                                                    <p className="text-[10px] font-bold text-emerald-600 uppercase">{t('additional_charge')}</p>
                                                     <p className="text-2xl font-black text-emerald-600">+${extraChargeInfo.extraCharge}</p>
                                                 </div>
                                             </div>
 
                                             <div className="grid grid-cols-2 gap-3">
                                                 {(['cash', 'card'] as const).map(m => (
-                                                    <button
-                                                        key={m}
-                                                        onClick={() => setPaymentMethod(m)}
+                                                    <button key={m} onClick={() => setPaymentMethod(m)}
                                                         className={`flex items-center justify-center gap-3 py-4 rounded-2xl border-2 font-black uppercase text-[10px] tracking-widest transition-all
                                                             ${paymentMethod === m
                                                                 ? 'bg-[#5D7B93] border-[#5D7B93] text-white shadow-lg shadow-[#5D7B93]/20'
-                                                                : isDark ? 'bg-white/5 border-white/5 text-slate-500' : 'bg-white border-slate-200 text-slate-400'}`}
-                                                    >
-                                                        {m === 'cash' ? <Banknote size={16} /> : <CreditCard size={16} />} {m === 'cash' ? 'Cash' : 'Card'}
+                                                                : isDark ? 'bg-white/5 border-white/5 text-slate-500' : 'bg-white border-slate-200 text-slate-400'}`}>
+                                                        {m === 'cash' ? <Banknote size={16} /> : <CreditCard size={16} />}
+                                                        {m === 'cash' ? t('payment_cash') : t('payment_card')}
                                                     </button>
                                                 ))}
                                             </div>
@@ -334,11 +351,14 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
 
                                 {/* Room Change */}
                                 <div className={`p-6 rounded-[2rem] border ${isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
-                                    <label className={labelClass}>Change Room (Transfer)</label>
-                                    <select className={inputClass} value={editForm.room_id} onChange={e => setEditForm(prev => ({ ...prev, room_id: e.target.value }))}>
-                                        <option value={room.id}>Stay in Current Room №{room.number}</option>
+                                    <label className={labelClass}>{t('change_room')}</label>
+                                    <select className={inputClass} value={editForm.room_id}
+                                        onChange={e => setEditForm(prev => ({ ...prev, room_id: e.target.value }))}>
+                                        <option value={room.id}>{t('stay_current_room')} №{room.number}</option>
                                         {availableRooms.map(r => (
-                                            <option key={r.id} value={r.id} className="bg-slate-800 text-white">№{r.number} ({r.type}) - ${r.price_per_night}</option>
+                                            <option key={r.id} value={r.id} className="bg-slate-800 text-white">
+                                                №{r.number} ({r.type}) - ${r.price_per_night}
+                                            </option>
                                         ))}
                                     </select>
                                 </div>
@@ -346,45 +366,35 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                         )}
                     </div>
 
-                    {/* Footer Buttons */}
+                    {/* Footer */}
                     <div className={`p-8 border-t ${isDark ? 'border-white/5' : 'border-slate-100'} bg-transparent`}>
                         <div className="flex gap-4">
                             {!isEditing ? (
                                 <>
-                                    <button
-                                        onClick={() => setIsEditing(true)}
+                                    <button onClick={() => setIsEditing(true)}
                                         className={`flex-1 py-5 rounded-3xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 border transition-all
-                                        ${isDark ? 'bg-white/5 border-white/5 text-[#A2B3C1] hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'}`}
-                                    >
-                                        <Edit3 size={16} /> Edit
+                                        ${isDark ? 'bg-white/5 border-white/5 text-[#A2B3C1] hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'}`}>
+                                        <Edit3 size={16} /> {t('edit')}
                                     </button>
-                                    <button
-                                        onClick={handleCheckout}
-                                        disabled={loading}
+                                    <button onClick={handleCheckout} disabled={loading}
                                         className={`flex-[1.5] py-5 rounded-3xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 shadow-xl transition-all active:scale-95 text-white
-                                        ${lateStatus.lateHours > 0 ? 'bg-red-600 shadow-red-500/20' : 'bg-[#5D7B93] shadow-[#5D7B93]/20'}`}
-                                    >
+                                        ${lateStatus.lateHours > 0 ? 'bg-red-600 shadow-red-500/20' : 'bg-[#5D7B93] shadow-[#5D7B93]/20'}`}>
                                         {loading ? <Loader2 className="animate-spin" size={18} /> : <LogOut size={16} />}
-                                        {lateStatus.lateHours > 0 ? `Checkout + $${lateStatus.penalty}` : 'Checkout'}
+                                        {lateStatus.lateHours > 0 ? `${t('checkout_label')} + $${lateStatus.penalty}` : t('checkout_label')}
                                     </button>
                                 </>
                             ) : (
                                 <>
-                                    <button
-                                        onClick={() => setIsEditing(false)}
+                                    <button onClick={() => setIsEditing(false)}
                                         className={`flex-1 py-5 rounded-3xl font-black uppercase text-[10px] tracking-widest transition-all
-                                        ${isDark ? 'bg-white/5 text-slate-500 hover:bg-white/10' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-                                    >
-                                        Cancel
+                                        ${isDark ? 'bg-white/5 text-slate-500 hover:bg-white/10' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                                        {t('cancel')}
                                     </button>
-                                    <button
-                                        onClick={handleUpdate}
-                                        disabled={loading}
+                                    <button onClick={handleUpdate} disabled={loading}
                                         className="flex-[2] py-5 rounded-3xl font-black uppercase text-[10px] tracking-[0.2em] text-white shadow-xl shadow-[#5D7B93]/30 flex items-center justify-center gap-2 transition-all active:scale-95"
-                                        style={{ background: 'linear-gradient(135deg, #5D7B93 0%, #A2B3C1 100%)' }}
-                                    >
+                                        style={{ background: 'linear-gradient(135deg, #5D7B93 0%, #A2B3C1 100%)' }}>
                                         {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                                        Save & Update
+                                        {t('save_update')}
                                     </button>
                                 </>
                             )}
@@ -392,6 +402,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

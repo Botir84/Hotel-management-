@@ -233,3 +233,46 @@ class CameraZoneViewSet(viewsets.ModelViewSet):
     queryset = CameraZone.objects.all().order_by('-created_at')
     serializer_class = CameraZoneSerializer
     permission_classes = [AllowAny] # Keyinchalik IsAdminUser qilish mumkin
+
+
+"""
+Bu kodni api/views.py ga qo'shing
+va api/urls.py ga path qo'shing:
+  path('rooms/<int:room_id>/door-status/', DoorStatusView.as_view()),
+"""
+
+class DoorStatusView(APIView):
+    """
+    Xonaning eshik statusini qaytaradi.
+    Frontend har 5 soniyada shu endpointga so'rov yuboradi.
+    
+    GET /api/rooms/{room_id}/door-status/
+    Response: {"door_open": true/false, "last_updated": "...", "has_sensor": true}
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, room_id):
+        try:
+            room = Room.objects.get(id=room_id)
+        except Room.DoesNotExist:
+            return Response({"error": "Xona topilmadi"}, status=404)
+
+        # Sensor biriktirilmagan bo'lsa
+        if not room.tuya_device_id:
+            return Response({
+                "has_sensor": False,
+                "door_open": None,
+                "last_updated": None,
+            })
+
+        # Room modelidagi door_status fieldidan o'qish
+        # tuya_listener.py bu fieldni yangilab turadi
+        door_open = getattr(room, 'door_status', 'closed') == 'open'
+
+        return Response({
+            "has_sensor": True,
+            "door_open": door_open,
+            "last_updated": getattr(room, 'door_last_updated', None),
+            "room_number": room.number,
+            "tuya_device_id": room.tuya_device_id,
+        })

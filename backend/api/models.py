@@ -25,6 +25,14 @@ class Room(models.Model):
     status = models.CharField(max_length=20, default='available')
     chategory = models.CharField(max_length=100)
     price_per_night = models.DecimalField(max_digits=10, decimal_places=2, default=25.00)
+    tuya_device_id = models.CharField(
+    max_length=100, blank=True, null=True)
+    door_status = models.CharField(max_length=10, default='closed')
+    door_last_updated = models.DateTimeField(null=True, blank=True)
+    size_room = models.PositiveIntegerField(
+    default=25,
+    help_text="Xona hajmi (m²)"
+)
     
 
     def __str__(self):
@@ -88,6 +96,11 @@ class SecurityAlert(models.Model):
         upload_to='security_alerts/%Y/%m/%d/', 
         null=True, 
         blank=True
+    )
+    risk_score = models.IntegerField(default=0)
+    alert_type = models.CharField(max_length=30, blank=True, null=True)
+    room = models.ForeignKey(
+        Room, null=True, blank=True, on_delete=models.SET_NULL
     )
 
     class Meta:
