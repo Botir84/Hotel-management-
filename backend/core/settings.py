@@ -109,7 +109,7 @@ TUYA_CLIENT_SECRET = config('TUYA_CLIENT_SECRET', default='')
 TUYA_BASE_URL = config('TUYA_BASE_URL', default='https://openapi.tuyaeu.com')
 
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
+    SECURE_SSL_REDIRECT = False
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SESSION_COOKIE_SECURE = True
