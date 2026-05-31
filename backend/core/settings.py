@@ -110,7 +110,12 @@ TUYA_BASE_URL = config('TUYA_BASE_URL', default='https://openapi.tuyaeu.com')
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = False
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 0  # ← Bu ham muammo
+    SESSION_COOKIE_SECURE = False  # ← Railway HTTP da ham ishlaydi
+    CSRF_COOKIE_SECURE = False  
+
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.railway.app',
+    'https://*.up.railway.app',
+]
