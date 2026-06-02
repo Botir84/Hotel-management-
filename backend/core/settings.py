@@ -10,7 +10,10 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-mf$b2t4qnyikv8rdy3pms
 
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*').split(',')
+ALLOWED_HOSTS = config(
+    'ALLOWED_HOSTS',
+    default='*'
+).split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -108,14 +111,17 @@ TUYA_CLIENT_ID = config('TUYA_CLIENT_ID', default='')
 TUYA_CLIENT_SECRET = config('TUYA_CLIENT_SECRET', default='')
 TUYA_BASE_URL = config('TUYA_BASE_URL', default='https://openapi.tuyaeu.com')
 
-if not DEBUG:
-    SECURE_SSL_REDIRECT = False
-    SECURE_HSTS_SECONDS = 0  # ← Bu ham muammo
-    SESSION_COOKIE_SECURE = False  # ← Railway HTTP da ham ishlaydi
-    CSRF_COOKIE_SECURE = False  
-
+# Production sozlamalari
+SECURE_SSL_REDIRECT = False
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
+SECURE_HSTS_SECONDS = 0
 
 CSRF_TRUSTED_ORIGINS = [
     'https://*.railway.app',
     'https://*.up.railway.app',
+    'https://sofahotel.uz',
+    'https://www.sofahotel.uz',
+    'https://api.sofahotel.uz',
 ]
