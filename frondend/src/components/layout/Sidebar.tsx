@@ -35,6 +35,45 @@ const LANG_OPTIONS: { value: Lang; label: string; flag: string }[] = [
   { value: 'en', label: 'English', flag: '🇬🇧' },
 ];
 
+// ✅ AvatarCircle — Sidebar TASHQARISIDA aniqlangan
+// Shuning uchun har render da qayta mount bo'lmaydi
+interface AvatarCircleProps {
+  avatarUrl: string | null;
+  initials: string;
+  size?: number;
+  border?: boolean;
+}
+
+function AvatarCircle({ avatarUrl, initials, size = 40, border = true }: AvatarCircleProps) {
+  return (
+    <div
+      style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}
+      className={`shadow-lg ${border ? 'border-2 border-[#5D7B93]/30' : ''} bg-slate-200`}
+    >
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt="Avatar"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          onError={e => {
+            (e.target as HTMLImageElement).src =
+              `https://ui-avatars.com/api/?name=${initials}&background=5D7B93&color=fff&bold=true`;
+          }}
+        />
+      ) : (
+        <div style={{
+          width: '100%', height: '100%',
+          background: 'linear-gradient(135deg,#5D7B93,#7a9ab3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontWeight: 900, fontSize: size * 0.32,
+        }}>
+          {initials}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const navigate = useNavigate();
   const { isAdmin, user, signOut } = useAuth();
@@ -64,8 +103,9 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
   const displayName = profileData?.first_name || user?.first_name || user?.username || '';
 
-  const getInitials = () =>
-    displayName ? displayName[0].toUpperCase() : user?.username?.slice(0, 2).toUpperCase() || 'U';
+  const initials = displayName
+    ? displayName[0].toUpperCase()
+    : user?.username?.slice(0, 2).toUpperCase() || 'U';
 
   // ✅ Bug 2 & 3: Outside click — desktop va mobil alohida
   useEffect(() => {
@@ -101,33 +141,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     ? 'bg-[#5D7B93]/20 text-white'
     : 'bg-[#5D7B93]/10 text-[#5D7B93]';
 
-  const AvatarCircle = ({ size = 40, border = true }: { size?: number; border?: boolean }) => (
-    <div
-      style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}
-      className={`shadow-lg ${border ? 'border-2 border-[#5D7B93]/30' : ''} bg-slate-200`}
-    >
-      {avatarUrl ? (
-        <img
-          src={avatarUrl}
-          alt="Avatar"
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          onError={e => {
-            (e.target as HTMLImageElement).src =
-              `https://ui-avatars.com/api/?name=${getInitials()}&background=5D7B93&color=fff&bold=true`;
-          }}
-        />
-      ) : (
-        <div style={{
-          width: '100%', height: '100%',
-          background: 'linear-gradient(135deg,#5D7B93,#7a9ab3)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#fff', fontWeight: 900, fontSize: size * 0.32,
-        }}>
-          {getInitials()}
-        </div>
-      )}
-    </div>
-  );
+  // AvatarCircle endi tashqarida aniqlangan — qayta mount bo'lmaydi
 
   // ✅ ProfileMenuItems — inline component sifatida, props orqali emas
   const ProfileMenuContent = () => {
@@ -290,7 +304,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   ${isDark ? 'bg-slate-900 border-slate-800 text-slate-300' : 'bg-white border-gray-100 text-gray-700'}`}
               >
                 <div className="flex items-center gap-3 px-4 py-2 mb-2 border-b border-slate-500/10">
-                  <AvatarCircle size={36} border={false} />
+                  <AvatarCircle avatarUrl={avatarUrl} initials={initials} size={36} border={false} />
                   <div className="overflow-hidden">
                     <p className={`text-sm font-black truncate ${isDark ? 'text-white' : 'text-slate-800'}`}>
                       {displayName || user?.username}
@@ -313,7 +327,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 : 'hover:bg-slate-500/5'
               }`}
           >
-            <AvatarCircle size={40} border={true} />
+            <AvatarCircle avatarUrl={avatarUrl} initials={initials} size={40} border={true} />
             <div className="flex-1 text-left overflow-hidden opacity-0 group-hover:opacity-100 transition-all duration-500">
               <p className={`text-sm font-black truncate ${isDark ? 'text-white' : 'text-slate-800'}`}>
                 {displayName || user?.username}
@@ -362,7 +376,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             <div className={`rounded-full transition-all overflow-hidden
               ${isProfileOpen ? 'ring-2 ring-[#5D7B93] scale-110' : 'ring-2 ring-transparent'}`}
             >
-              <AvatarCircle size={32} border={false} />
+              <AvatarCircle avatarUrl={avatarUrl} initials={initials} size={32} border={false} />
             </div>
             <span className="text-[9px] font-bold uppercase tracking-tighter">{t('nav_profile')}</span>
           </button>
@@ -379,7 +393,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 ${isDark ? 'bg-slate-900 border-white/5 text-slate-300' : 'bg-white border-slate-100 text-slate-700'}`}
             >
               <div className="flex items-center gap-4 px-6 pb-4 border-b border-slate-500/10 mb-2">
-                <AvatarCircle size={48} border={false} />
+                <AvatarCircle avatarUrl={avatarUrl} initials={initials} size={48} border={false} />
                 <div>
                   <p className={`text-sm font-black truncate ${isDark ? 'text-white' : 'text-slate-800'}`}>
                     {displayName || user?.username}
