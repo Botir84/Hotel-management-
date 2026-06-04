@@ -63,17 +63,22 @@ function FormModal({ mode, initial, onClose, onSave, isDark }: {
   const labelCls = `block text-[10px] font-black mb-1.5 uppercase tracking-[0.15em]`;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-end justify-center"
+    // ✅ items-center + p-4 — o'rtada
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
       style={{ background: 'rgba(2,6,23,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className={`w-full max-w-lg rounded-t-[2rem] border overflow-hidden shadow-2xl
+
+      {/* ✅ rounded-[2rem] — to'liq yumaloq */}
+      <div className={`w-full max-w-lg rounded-[2rem] border overflow-hidden shadow-2xl
         ${isDark ? 'bg-[#0f172a] border-white/5' : 'bg-white border-slate-200'}`}
         style={{ maxHeight: '90vh', overflowY: 'auto' }}>
 
+        {/* Handle bar */}
         <div className="flex justify-center pt-3 pb-1">
           <div className={`w-10 h-1 rounded-full ${isDark ? 'bg-white/15' : 'bg-slate-200'}`} />
         </div>
 
+        {/* Header */}
         <div className={`px-6 py-5 flex items-center justify-between border-b ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: PRIMARY_BG }}>
@@ -93,6 +98,7 @@ function FormModal({ mode, initial, onClose, onSave, isDark }: {
           </button>
         </div>
 
+        {/* Body */}
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -152,13 +158,12 @@ function FormModal({ mode, initial, onClose, onSave, isDark }: {
 function DeleteConfirm({ onCancel, onConfirm, isDark }: { onCancel: () => void; onConfirm: () => void; isDark: boolean }) {
   const { t } = useLang();
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-end justify-center"
+    // ✅ items-center + p-4 — o'rtada
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
       style={{ background: 'rgba(2,6,23,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-      <div className={`w-full max-w-sm rounded-t-[2rem] border p-6 shadow-2xl
+      {/* ✅ rounded-[2rem] — to'liq yumaloq */}
+      <div className={`w-full max-w-sm rounded-[2rem] border p-6 shadow-2xl
         ${isDark ? 'bg-[#0f172a] border-white/5' : 'bg-white border-slate-200'}`}>
-        <div className="flex justify-center mb-4">
-          <div className={`w-10 h-1 rounded-full ${isDark ? 'bg-white/15' : 'bg-slate-200'}`} />
-        </div>
         <div className="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mb-4">
           <ShieldAlert size={22} />
         </div>
@@ -194,7 +199,6 @@ export function RoomsManagePage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // ── roomService orqali fetch ──────────────────────────────────────────────
   const fetchRooms = useCallback(async () => {
     setLoading(true);
     try {
@@ -210,25 +214,12 @@ export function RoomsManagePage() {
   useEffect(() => { fetchRooms(); }, [fetchRooms]);
   useEffect(() => { setCurrentPage(1); }, [search, filterStatus]);
 
-  const handleCreate = async (f: Partial<Room>) => {
-    await roomService.createRoom(f);
-    await fetchRooms();
-  };
-
-  const handleUpdate = async (f: Partial<Room>) => {
-    await roomService.updateRoom(editRoom!.id, f);
-    await fetchRooms();
-  };
-
+  const handleCreate = async (f: Partial<Room>) => { await roomService.createRoom(f); await fetchRooms(); };
+  const handleUpdate = async (f: Partial<Room>) => { await roomService.updateRoom(editRoom!.id, f); await fetchRooms(); };
   const handleDelete = async (id: number) => {
-    try {
-      await roomService.deleteRoom(id);
-      setRooms(p => p.filter(r => r.id !== id));
-    } catch {
-      alert(t('delete_title'));
-    } finally {
-      setDeleteId(null);
-    }
+    try { await roomService.deleteRoom(id); setRooms(p => p.filter(r => r.id !== id)); }
+    catch { alert(t('delete_title')); }
+    finally { setDeleteId(null); }
   };
 
   const filtered = rooms.filter(r => {
