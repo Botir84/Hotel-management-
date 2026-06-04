@@ -129,7 +129,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
     const handleCheckout = async () => {
         if (!reservation || !room) return;
         let confirmMessage = `${t('checkout_confirm')} №${room.number}?`;
-        if (lateStatus.lateHours > 0) confirmMessage = `⚠️ ${t('late_checkout')}! ${t('penalty')}: $${lateStatus.penalty}`;
+        if (lateStatus.lateHours > 0) confirmMessage = `⚠️ ${t('late_checkout')}! ${t('penalty')}: ${lateStatus.penalty}so'm`;
         if (!window.confirm(confirmMessage)) return;
 
         setLoading(true);
