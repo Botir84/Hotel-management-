@@ -59,8 +59,12 @@ export const profileService = {
     }),
 };
 
+// api.ts da bir marta yoziladi:
 export const roomService = {
     getRooms: () => api.get('/rooms/'),
+    createRoom: (data: any) => api.post('/rooms/', data),
+    updateRoom: (id: number, data: any) => api.patch(`/rooms/${id}/`, data),
+    deleteRoom: (id: number) => api.delete(`/rooms/${id}/`),
     updateRoomStatus: (id: number, status: string) => api.patch(`/rooms/${id}/`, { status }),
 };
 

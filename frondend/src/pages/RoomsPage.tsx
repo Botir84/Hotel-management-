@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom';
 import {
   BedDouble, Plus, Trash2, Save, X, Edit2,
   RefreshCw, Search, DoorOpen, DoorClosed,
-  Wifi, WifiOff, Home, CheckCircle2, AlertTriangle,
+  Wifi, WifiOff, CheckCircle2, AlertTriangle,
   Maximize2, ShieldAlert, Loader2, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLang } from '../contexts/LanguageContext';
+import { roomService } from '../services/api';
 
 interface Room {
   id: number;
@@ -23,9 +24,6 @@ interface Room {
 
 type ModalMode = 'add' | 'edit' | null;
 
-// ✅ STATUS_CFG — value lar o'zgarmaydi (DB qiymatlari), label lar t() bilan
-const STATUS_VALUES = ['available', 'occupied', 'dirty'] as const;
-
 const STATUS_STYLE = {
   available: { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', dot: 'bg-emerald-500' },
   occupied: { color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/20', dot: 'bg-red-500' },
@@ -33,22 +31,10 @@ const STATUS_STYLE = {
 };
 
 const CATEGORIES = ['1-bad', '2-bad', 'suite', 'deluxe', 'standard'];
-const API = 'http://127.0.0.1:8000/api';
 const ITEMS_PER_PAGE = 8;
 const PRIMARY = '#5D7B93';
 const PRIMARY_LIGHT = '#7A97AD';
 const PRIMARY_BG = 'rgba(93,123,147,0.1)';
-const PRIMARY_BORDER = 'rgba(93,123,147,0.2)';
-
-function getToken() {
-  try { return JSON.parse(localStorage.getItem('user') || '{}').access || ''; }
-  catch { return ''; }
-}
-const authH = () => ({ Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' });
-const apiGet = async (p: string) => { const r = await fetch(API + p, { headers: authH() }); if (!r.ok) throw new Error(`${r.status}`); return r.json(); };
-const apiPost = async (p: string, b: object) => { const r = await fetch(API + p, { method: 'POST', headers: authH(), body: JSON.stringify(b) }); if (!r.ok) throw new Error(`${r.status}`); return r.json(); };
-const apiPatch = async (p: string, b: object) => { const r = await fetch(API + p, { method: 'PATCH', headers: authH(), body: JSON.stringify(b) }); if (!r.ok) throw new Error(`${r.status}`); return r.json(); };
-const apiDelete = async (p: string) => { const r = await fetch(API + p, { method: 'DELETE', headers: authH() }); if (!r.ok) throw new Error(`${r.status}`); };
 
 // ─── Form Modal ───────────────────────────────────────────────────────────────
 function FormModal({ mode, initial, onClose, onSave, isDark }: {
@@ -68,7 +54,7 @@ function FormModal({ mode, initial, onClose, onSave, isDark }: {
     if (!form.number?.trim()) { setError(t('room_number')); return; }
     setSaving(true); setError('');
     try { await onSave(form); onClose(); }
-    catch (e: any) { setError(e.message || 'Xatolik'); }
+    catch (e: any) { setError(e.response?.data?.detail || e.message || 'Xatolik'); }
     finally { setSaving(false); }
   };
 
@@ -177,9 +163,7 @@ function DeleteConfirm({ onCancel, onConfirm, isDark }: { onCancel: () => void; 
           <ShieldAlert size={22} />
         </div>
         <p className={`text-base font-black mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('delete_title')}</p>
-        <p className={`text-sm mb-5 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-          {t('delete_confirm')}
-        </p>
+        <p className={`text-sm mb-5 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('delete_confirm')}</p>
         <div className="flex gap-3">
           <button onClick={onCancel} className={`flex-1 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all
             ${isDark ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
@@ -210,22 +194,41 @@ export function RoomsManagePage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // ── roomService orqali fetch ──────────────────────────────────────────────
   const fetchRooms = useCallback(async () => {
     setLoading(true);
-    try { setRooms(await apiGet('/rooms/')); }
-    catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    try {
+      const res = await roomService.getRooms();
+      setRooms(res.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchRooms(); }, [fetchRooms]);
   useEffect(() => { setCurrentPage(1); }, [search, filterStatus]);
 
-  const handleCreate = async (f: Partial<Room>) => { await apiPost('/rooms/', f); await fetchRooms(); };
-  const handleUpdate = async (f: Partial<Room>) => { await apiPatch(`/rooms/${editRoom!.id}/`, f); await fetchRooms(); };
+  const handleCreate = async (f: Partial<Room>) => {
+    await roomService.createRoom(f);
+    await fetchRooms();
+  };
+
+  const handleUpdate = async (f: Partial<Room>) => {
+    await roomService.updateRoom(editRoom!.id, f);
+    await fetchRooms();
+  };
+
   const handleDelete = async (id: number) => {
-    try { await apiDelete(`/rooms/${id}/`); setRooms(p => p.filter(r => r.id !== id)); }
-    catch { alert(t('delete_title')); }
-    finally { setDeleteId(null); }
+    try {
+      await roomService.deleteRoom(id);
+      setRooms(p => p.filter(r => r.id !== id));
+    } catch {
+      alert(t('delete_title'));
+    } finally {
+      setDeleteId(null);
+    }
   };
 
   const filtered = rooms.filter(r => {
@@ -245,7 +248,6 @@ export function RoomsManagePage() {
     sensor: rooms.filter(r => r.tuya_device_id).length,
   };
 
-  // ✅ Filter lar — value o'zgarmaydi, label t() bilan
   const filterOptions = [
     { value: 'all', label: t('all') },
     { value: 'available', label: t('available') },
@@ -329,14 +331,12 @@ export function RoomsManagePage() {
             <h3 className={`font-black text-xs md:text-sm uppercase tracking-widest ${textPrim}`}>{t('rooms_list')}</h3>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search */}
             <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border
               ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'}`}>
               <Search size={14} className="text-slate-500" />
               <input type="text" placeholder={t('search_room')} value={search} onChange={e => setSearch(e.target.value)}
                 className="bg-transparent text-xs font-bold outline-none text-slate-400 w-32 md:w-40" />
             </div>
-            {/* Filter */}
             <div className="flex gap-2 overflow-x-auto pb-0.5">
               {filterOptions.map(f => (
                 <button key={f.value} onClick={() => setFilterStatus(f.value)}

@@ -1,8 +1,9 @@
-import { BedDouble, Users, Maximize2, Sparkles, Brush, DoorOpen, DoorClosed } from 'lucide-react';
+import { BedDouble, Maximize2, Sparkles, Brush, DoorOpen, DoorClosed } from 'lucide-react';
 import { Room } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLang } from '../../contexts/LanguageContext';
 import { useState, useEffect, useRef } from 'react';
+import api from '../../services/api';
 
 interface RoomCardProps {
   room: Room;
@@ -33,6 +34,13 @@ function getStatus(raw?: string): RoomStatus {
   return 'occupied';
 }
 
+// Narxni UZS formatida ko'rsatish
+function formatPrice(price: string | number): string {
+  const num = Number(price);
+  if (isNaN(num)) return '0';
+  return num.toLocaleString('uz-UZ');
+}
+
 // ── Door Status Hook ──────────────────────────────────────────────────────────
 function useDoorStatus(roomId: number, hasSensor: boolean) {
   const [doorStatus, setDoorStatus] = useState<DoorStatus>('unknown');
@@ -43,13 +51,8 @@ function useDoorStatus(roomId: number, hasSensor: boolean) {
     if (!hasSensor) return;
     const fetchStatus = async () => {
       try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        const token = user.access || '';
-        const res = await fetch(`http://127.0.0.1:8000/api/rooms/${roomId}/door-status/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
+        const res = await api.get(`/rooms/${roomId}/door-status/`);
+        const data = res.data;
         setDoorStatus(data.door_open ? 'open' : 'closed');
         if (data.last_updated) {
           const d = new Date(data.last_updated);
@@ -73,7 +76,6 @@ export function RoomCard({ room, onClick, selected = false }: RoomCardProps) {
   const status = getStatus(room.status);
   const isAvail = status === 'available';
 
-  // ✅ Status label lar t() bilan — config ichida emas, render qismida
   const STATUS_CONFIG = {
     available: { dotColor: '#22c55e', textColor: '#15803d', bg: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.45)', pulse: true },
     occupied: { dotColor: '#ef4444', textColor: '#b91c1c', bg: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.45)', pulse: false },
@@ -81,9 +83,21 @@ export function RoomCard({ room, onClick, selected = false }: RoomCardProps) {
   };
 
   const BTN_CONFIG = {
-    available: { label: t('book'), style: { background: 'linear-gradient(135deg, #5D7B93 0%, #A2B3C1 100%)', color: '#F8FAFC', boxShadow: '0 8px 24px rgba(93,123,147,0.35)' } as React.CSSProperties, hoverClass: 'btn-available' },
-    occupied: { label: t('occupied'), style: { background: 'rgba(162,179,193,0.12)', color: '#A2B3C1', border: '1px solid rgba(162,179,193,0.25)', cursor: 'not-allowed' } as React.CSSProperties, hoverClass: '' },
-    cleaning: { label: t('cleaning'), style: { background: 'rgba(245,158,11,0.12)', color: '#b45309', border: '1px solid rgba(245,158,11,0.3)', cursor: 'not-allowed' } as React.CSSProperties, hoverClass: '' },
+    available: {
+      label: t('book'),
+      style: { background: 'linear-gradient(135deg, #5D7B93 0%, #A2B3C1 100%)', color: '#F8FAFC', boxShadow: '0 8px 24px rgba(93,123,147,0.35)' } as React.CSSProperties,
+      hoverClass: 'btn-available',
+    },
+    occupied: {
+      label: t('occupied'),
+      style: { background: 'rgba(162,179,193,0.12)', color: '#A2B3C1', border: '1px solid rgba(162,179,193,0.25)', cursor: 'not-allowed' } as React.CSSProperties,
+      hoverClass: '',
+    },
+    cleaning: {
+      label: t('cleaning'),
+      style: { background: 'rgba(245,158,11,0.12)', color: '#b45309', border: '1px solid rgba(245,158,11,0.3)', cursor: 'not-allowed' } as React.CSSProperties,
+      hoverClass: '',
+    },
   };
 
   const sc = STATUS_CONFIG[status];
@@ -107,7 +121,7 @@ export function RoomCard({ room, onClick, selected = false }: RoomCardProps) {
     ? `${typeLabel[category] || category} ${room.number}`
     : typeLabel[category] || category || 'Wonderful Room';
   const roomImage = (room as any).image_url
-    ? `http://127.0.0.1:8000${(room as any).image_url}`
+    ? `${import.meta.env.VITE_API_URL?.replace('/api', '')}${(room as any).image_url}`
     : ROOM_IMAGES[room.type] || DEFAULT_IMAGE;
 
   return (
@@ -189,14 +203,14 @@ export function RoomCard({ room, onClick, selected = false }: RoomCardProps) {
               </span>
             </div>
 
-            {/* Narx */}
+            {/* Narx — UZS formatida */}
             <div style={{
               position: 'absolute', bottom: 12, left: 12,
               background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)',
               padding: '6px 12px', borderRadius: 12, color: '#fff'
             }}>
-              <span style={{ fontWeight: 900 }}>${Number(room.price_per_night)}</span>
-              <span style={{ fontSize: 9, opacity: 0.8 }}>/night</span>
+              <span style={{ fontWeight: 900 }}>{formatPrice(room.price_per_night)}</span>
+              <span style={{ fontSize: 9, opacity: 0.8 }}> so'm/kecha</span>
             </div>
           </div>
 
