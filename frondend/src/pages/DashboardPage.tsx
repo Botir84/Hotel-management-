@@ -1,85 +1,90 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
 import { Room, Reservation } from '../types';
 import api, { roomService } from '../services/api';
 import { useLang } from '../contexts/LanguageContext';
+import { useTheme } from '../contexts/ThemeContext';
 
-// Komponentlar
 import { MetricsCards } from '../components/dashboard/MetricsCards';
 import { RoomGrid } from '../components/dashboard/RoomGrid';
 import { CheckInModal } from '../components/checkin/CheckInModal';
 import { RoomDetailsModal } from '../components/dashboard/RoomDetailsModal';
 
-// Contextlar
-import { useTheme } from '../contexts/ThemeContext';
+// ─── Fetch funksiyalari ───────────────────────────────────────────────────────
+const fetchRooms = async (): Promise<Room[]> => {
+  const res = await roomService.getRooms();
+  return Array.isArray(res.data) ? res.data : (res.data?.results || []);
+};
+
+const fetchCheckins = async (): Promise<Reservation[]> => {
+  const res = await api.get('/checkins/');
+  return Array.isArray(res.data) ? res.data : (res.data?.results || []);
+};
 
 export function DashboardPage() {
   const { t } = useLang();
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [checkins, setCheckins] = useState<Reservation[]>([]);
-  const [selectedRoom, setSelectedRoom] = useState<Room | undefined>();
+  const { isDark } = useTheme();
+  const queryClient = useQueryClient();
 
-  // Modallar holati
+  const [selectedRoom, setSelectedRoom] = useState<Room | undefined>();
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const { isDark } = useTheme();
+  // ✅ React Query — rooms cache
+  const {
+    data: rooms = [],
+    isLoading: roomsLoading,
+    isFetching: roomsFetching,
+  } = useQuery({
+    queryKey: ['rooms'],
+    queryFn: fetchRooms,
+    staleTime: 30_000,   // 30 soniya cache
+    gcTime: 300_000,
+    refetchInterval: 120_000,  // 2 daqiqada avtomatik yangilash
+  });
 
-  // Ma'lumotlarni yuklash funksiyasi
-  const fetchData = useCallback(async (isManual = false) => {
-    if (isManual) setRefreshing(true);
-    else setLoading(true);
+  // ✅ React Query — checkins cache
+  const {
+    data: checkins = [],
+    isLoading: checkinsLoading,
+  } = useQuery({
+    queryKey: ['checkins'],
+    queryFn: fetchCheckins,
+    staleTime: 30_000,
+    gcTime: 300_000,
+    refetchInterval: 120_000,
+  });
 
+  const loading = roomsLoading || checkinsLoading;
+  const refreshing = roomsFetching;
+
+  // ✅ Refresh — cache ni invalidate qiladi
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    queryClient.invalidateQueries({ queryKey: ['checkins'] });
+  }, [queryClient]);
+
+  const handleFinishCleaning = async (roomId: number) => {
     try {
-      const [roomsRes, checkinsRes] = await Promise.all([
-        roomService.getRooms(),
-        api.get('/checkins/'),
-      ]);
-
-      const rData = Array.isArray(roomsRes.data) ? roomsRes.data : (roomsRes.data?.results || []);
-      const cData = Array.isArray(checkinsRes.data) ? checkinsRes.data : (checkinsRes.data?.results || []);
-
-      setRooms(rData);
-      setCheckins(cData);
-    } catch (error) {
-      console.error("Ma'lumotlarni yuklashda xato:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      await api.patch(`/rooms/${roomId}/`, { status: 'available' });
+      handleRefresh();
+    } catch {
+      alert('Xonani yangilashda xato yuz berdi');
     }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-    // Har 2 daqiqada avtomatik yangilash (Live Dashboard effekti)
-    const interval = setInterval(() => fetchData(), 120000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  };
 
   const handleRoomClick = (room: Room) => {
     setSelectedRoom(room);
     const status = room.status.toLowerCase();
-
     if (status === 'available') {
       setCheckInOpen(true);
     } else if (status === 'occupied' || status === 'booked') {
       setDetailsOpen(true);
     } else if (status === 'dirty' || status === 'cleaning') {
-      // confirm() o'rniga chiroyli modal ishlatsa ham bo'ladi, hozircha mantiq saqlandi
       if (window.confirm(`${room.number}-xona tayyormi? Holatni 'Bo'sh'ga o'tkazamiz.`)) {
         handleFinishCleaning(room.id);
       }
-    }
-  };
-
-  const handleFinishCleaning = async (roomId: number) => {
-    try {
-      await api.patch(`/rooms/${roomId}/`, { status: 'available' });
-      fetchData(true);
-    } catch (e) {
-      alert("Xonani yangilashda xato yuz berdi");
     }
   };
 
@@ -97,7 +102,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6 md:space-y-10 p-3 md:p-6 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
-      {/* 1. Header & Quick Refresh */}
+      {/* Header */}
       <div className="flex items-center justify-between px-1">
         <div>
           <h1 className={`text-2xl md:text-3xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -107,11 +112,9 @@ export function DashboardPage() {
             {t('dashboard_subtitle')}
           </p>
         </div>
-
-
       </div>
 
-      {/* 2. Metrics Section */}
+      {/* Metrics */}
       <section className="animate-in fade-in zoom-in-95 duration-1000 delay-150">
         <MetricsCards
           rooms={rooms}
@@ -120,13 +123,13 @@ export function DashboardPage() {
         />
       </section>
 
-      {/* 3. Main Room Registry Section */}
+      {/* Room Grid */}
       <section className="relative min-h-[400px]">
         <RoomGrid
           rooms={rooms}
           onRoomClick={handleRoomClick}
           loading={loading || refreshing}
-          onRefresh={() => fetchData(true)}
+          onRefresh={handleRefresh}
           onNewCheckIn={() => {
             setSelectedRoom(undefined);
             setCheckInOpen(true);
@@ -134,19 +137,13 @@ export function DashboardPage() {
         />
       </section>
 
-      {/* MODALLAR */}
+      {/* Modallar */}
       {checkInOpen && (
         <CheckInModal
           isOpen={checkInOpen}
           room={selectedRoom}
-          onClose={() => {
-            setCheckInOpen(false);
-            setSelectedRoom(undefined);
-          }}
-          onSuccess={() => {
-            setCheckInOpen(false);
-            fetchData(true);
-          }}
+          onClose={() => { setCheckInOpen(false); setSelectedRoom(undefined); }}
+          onSuccess={() => { setCheckInOpen(false); handleRefresh(); }}
         />
       )}
 
@@ -155,18 +152,11 @@ export function DashboardPage() {
           isOpen={detailsOpen}
           room={selectedRoom}
           reservation={checkins.find(c => {
-            // Room ID object yoki number bo'lishini tekshirish
             const checkinRoomId = typeof c.room === 'object' ? (c.room as any).id : c.room;
             return String(checkinRoomId) === String(selectedRoom.id);
           })}
-          onClose={() => {
-            setDetailsOpen(false);
-            setSelectedRoom(undefined);
-          }}
-          onSuccess={() => {
-            setDetailsOpen(false);
-            fetchData(true);
-          }}
+          onClose={() => { setDetailsOpen(false); setSelectedRoom(undefined); }}
+          onSuccess={() => { setDetailsOpen(false); handleRefresh(); }}
         />
       )}
     </div>

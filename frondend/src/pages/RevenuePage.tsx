@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   TrendingUp, Wallet, Receipt, PieChart, Loader2,
   CalendarDays, RefreshCw, User, Home, Clock,
@@ -9,74 +10,78 @@ import { paymentService } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLang } from '../contexts/LanguageContext';
 
-// ✅ Loyiha rang palitasi
 const PRIMARY = '#5D7B93';
 const PRIMARY_LIGHT = '#7A97AD';
 const PRIMARY_BG = 'rgba(93,123,147,0.1)';
 const PRIMARY_BORDER = 'rgba(93,123,147,0.2)';
 
+// ─── Stats hisoblash ──────────────────────────────────────────────────────────
+function calcStats(data: any[]) {
+  const now = new Date();
+  const todayStr = now.toLocaleDateString('en-CA');
+  const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const curYear = now.getFullYear();
+
+  let d = 0, m = 0, y = 0, t = 0;
+  data.forEach((p: any) => {
+    if (!p?.created_at) return;
+    const amount = parseFloat(p.amount) || 0;
+    const pDate = new Date(p.created_at);
+    t += amount;
+    if (pDate.toLocaleDateString('en-CA') === todayStr) d += amount;
+    if (pDate.getTime() >= startMonth) m += amount;
+    if (pDate.getFullYear() === curYear) y += amount;
+  });
+  return { daily: d, monthly: m, yearly: y, total: t };
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+function TableSkeleton({ isDark }: { isDark: boolean }) {
+  return (
+    <div className="space-y-3 p-6">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className={`h-14 rounded-2xl animate-pulse ${isDark ? 'bg-white/5' : 'bg-slate-100'}`} />
+      ))}
+    </div>
+  );
+}
+
 export function RevenuePage() {
   const { t } = useLang();
   const { isDark } = useTheme();
-  const [loading, setLoading] = useState(true);
-  const [payments, setPayments] = useState([]);
+  const queryClient = useQueryClient();
+
   const [selectedDate, setSelectedDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  const [stats, setStats] = useState({
-    daily: 0, monthly: 0, yearly: 0, total: 0, filtered: 0
-  });
-
-  const fetchRevenueData = async () => {
-    try {
-      setLoading(true);
+  // ✅ React Query — cache bilan
+  const { data: rawData = [], isLoading, isFetching } = useQuery({
+    queryKey: ['payments'],
+    queryFn: async () => {
       const res = await paymentService.getPayments();
       const data = res.data?.results || (Array.isArray(res.data) ? res.data : []);
-      const sortedData = data.sort((a: any, b: any) =>
+      return [...data].sort((a: any, b: any) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
-      setPayments(sortedData);
+    },
+    staleTime: 30_000,
+    gcTime: 300_000,
+  });
 
-      const now = new Date();
-      const todayStr = now.toLocaleDateString('en-CA');
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      const currentYear = now.getFullYear();
-
-      let d = 0, m = 0, y = 0, t = 0;
-      data.forEach((p: any) => {
-        if (!p?.created_at) return;
-        const amount = parseFloat(p.amount) || 0;
-        const pDate = new Date(p.created_at);
-        const pTime = pDate.getTime();
-        const pDateStr = pDate.toLocaleDateString('en-CA');
-        t += amount;
-        if (pDateStr === todayStr) d += amount;
-        if (pTime >= startOfMonth) m += amount;
-        if (pDate.getFullYear() === currentYear) y += amount;
-      });
-      setStats({ daily: d, monthly: m, yearly: y, total: t, filtered: 0 });
-    } catch (error) {
-      console.error('Revenue fetch error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchRevenueData(); }, []);
+  const stats = useMemo(() => calcStats(rawData), [rawData]);
 
   const filteredPayments = useMemo(() => {
-    let filtered = [...payments];
-    let sum = 0;
-    if (selectedDate) {
-      filtered = payments.filter((p: any) =>
-        new Date(p.created_at).toLocaleDateString('en-CA') === selectedDate
-      );
-      sum = filtered.reduce((acc, curr: any) => acc + (parseFloat(curr.amount) || 0), 0);
-    }
-    if (selectedDate) setTimeout(() => setStats(prev => ({ ...prev, filtered: sum })), 0);
-    return filtered;
-  }, [payments, selectedDate]);
+    if (!selectedDate) return rawData;
+    return rawData.filter((p: any) =>
+      new Date(p.created_at).toLocaleDateString('en-CA') === selectedDate
+    );
+  }, [rawData, selectedDate]);
+
+  const filteredSum = useMemo(() =>
+    filteredPayments.reduce((acc: number, p: any) => acc + (parseFloat(p.amount) || 0), 0),
+    [filteredPayments]
+  );
 
   const totalPages = Math.ceil(filteredPayments.length / itemsPerPage);
   const currentPayments = useMemo(() => {
@@ -96,17 +101,6 @@ export function RevenuePage() {
   const textPrim = isDark ? 'text-white' : 'text-slate-900';
   const textMut = isDark ? 'text-slate-500' : 'text-slate-400';
 
-  if (loading) {
-    return (
-      <div className="h-[70vh] flex flex-col items-center justify-center gap-6 px-4">
-        <Loader2 size={48} className="animate-spin" style={{ color: PRIMARY }} />
-        <p className={`text-xs md:text-sm font-black uppercase tracking-[0.3em] text-center ${textMut}`}>
-          Ma'lumotlar qayta ishlanmoqda...
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 md:space-y-8 pb-10 px-2 sm:px-0 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
@@ -114,7 +108,6 @@ export function RevenuePage() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mt-4">
         <div className="px-2">
           <div className="flex items-center gap-3 mb-2">
-            {/* ✅ Loyiha asosiy rangi */}
             <div className="w-1.5 h-6 md:w-2 md:h-8 rounded-full" style={{ background: PRIMARY }} />
             <h1 className={`text-2xl md:text-4xl font-black tracking-tighter ${textPrim}`}>{t('revenue_title')}</h1>
           </div>
@@ -137,10 +130,11 @@ export function RevenuePage() {
               </button>
             )}
           </div>
-          <button onClick={fetchRevenueData}
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['payments'] })}
             className="group flex items-center justify-center gap-3 px-6 py-3 text-white rounded-xl md:rounded-2xl font-bold transition-all active:scale-95"
             style={{ background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_LIGHT} 100%)`, boxShadow: `0 8px 24px ${PRIMARY}50` }}>
-            <RefreshCw size={18} className="group-active:rotate-180 transition-transform duration-500" />
+            <RefreshCw size={18} className={`transition-transform duration-500 ${isFetching ? 'animate-spin' : 'group-active:rotate-180'}`} />
             Yangilash
           </button>
         </div>
@@ -148,7 +142,11 @@ export function RevenuePage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 px-2 sm:px-0">
-        {selectedDate ? (
+        {isLoading ? (
+          [...Array(4)].map((_, i) => (
+            <div key={i} className={`h-32 rounded-[2rem] animate-pulse ${isDark ? 'bg-white/5' : 'bg-slate-100'}`} />
+          ))
+        ) : selectedDate ? (
           <div className="col-span-1 lg:col-span-4 p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border flex items-center justify-between text-white"
             style={{ background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_LIGHT} 100%)`, boxShadow: `0 16px 40px ${PRIMARY}40` }}>
             <div>
@@ -156,7 +154,7 @@ export function RevenuePage() {
                 {selectedDate} {t('daily_income')}
               </p>
               <h2 className="text-2xl md:text-4xl font-black mt-1 md:mt-2">
-                {stats.filtered.toLocaleString()} <span className="text-xs md:text-sm opacity-60">UZS</span>
+                {filteredSum.toLocaleString()} <span className="text-xs md:text-sm opacity-60">UZS</span>
               </h2>
             </div>
             <div className="p-3 md:p-4 rounded-2xl md:rounded-3xl" style={{ background: 'rgba(255,255,255,0.2)' }}>
@@ -201,74 +199,76 @@ export function RevenuePage() {
               style={{ background: PRIMARY_BG, border: `1px solid ${PRIMARY_BORDER}`, color: PRIMARY }}>
               {currentPage} / {totalPages || 1}
             </span>
-            <span className={`text-[8px] md:text-[10px] font-bold px-3 py-1.5 bg-slate-500/10 rounded-full text-slate-500 uppercase tracking-tighter`}>
+            <span className="text-[8px] md:text-[10px] font-bold px-3 py-1.5 bg-slate-500/10 rounded-full text-slate-500 uppercase tracking-tighter">
               {filteredPayments.length} ta
             </span>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[600px]">
-            <thead>
-              <tr className={isDark ? 'bg-white/5' : 'bg-slate-50'}>
-                {[t('guest_room'), t('employee'), t('method'), t('amount_time')].map((h, i) => (
-                  <th key={i} className={`px-6 md:px-8 py-4 md:py-5 text-[9px] md:text-[10px] font-black uppercase text-slate-500 ${i === 3 ? 'text-right' : i > 0 ? 'text-center' : ''}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
-              {currentPayments.map((p: any) => (
-                <tr key={p.id} className={`transition-colors group ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/80'}`}>
-                  <td className="px-6 md:px-8 py-4 md:py-6">
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <User size={12} style={{ color: PRIMARY }} />
-                        <span className={`text-xs md:text-sm font-black ${textPrim} line-clamp-1`}>{p.guest_name || t('unknown')}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-slate-500">
-                        <Home size={10} />
-                        <span className="text-[9px] font-bold uppercase tracking-tighter">{p.room_number || 'N/A'}{t('room_suffix')}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 md:px-8 py-4 md:py-6 text-center">
-                    <div className="inline-flex items-center gap-2">
-                      <div className="w-6 h-6 md:w-7 md:h-7 rounded-full flex items-center justify-center text-[9px] font-black"
-                        style={{ background: PRIMARY_BG, color: PRIMARY, border: `1px solid ${PRIMARY_BORDER}` }}>
-                        {p.cashier_name?.charAt(0) || 'K'}
-                      </div>
-                      <span className={`text-[10px] md:text-xs font-bold ${textMut}`}>{p.cashier_name || t('cashier')}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 md:px-8 py-4 md:py-6 text-center">
-                    <span className={`px-3 py-1 rounded-lg text-[8px] md:text-[9px] font-black uppercase tracking-widest border
-                      ${p.method === 'cash'
-                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                        : 'border'}`}
-                      style={p.method !== 'cash' ? { background: PRIMARY_BG, color: PRIMARY, borderColor: PRIMARY_BORDER } : {}}>
-                      {p.method}
-                    </span>
-                  </td>
-                  <td className="px-6 md:px-8 py-4 md:py-6 text-right">
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className={`text-sm md:text-base font-black tracking-tight ${textPrim}`}>
-                        {parseFloat(p.amount).toLocaleString()} <span className="text-[9px] opacity-40 italic">UZS</span>
-                      </span>
-                      <div className="flex items-center gap-1 text-slate-500">
-                        <Clock size={10} />
-                        <span className="text-[8px] md:text-[9px] font-bold">
-                          {new Date(p.created_at).toLocaleString('uz-UZ', {
-                            hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
+        {isLoading ? <TableSkeleton isDark={isDark} /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left min-w-[600px]">
+              <thead>
+                <tr className={isDark ? 'bg-white/5' : 'bg-slate-50'}>
+                  {[t('guest_room'), t('employee'), t('method'), t('amount_time')].map((h, i) => (
+                    <th key={i} className={`px-6 md:px-8 py-4 md:py-5 text-[9px] md:text-[10px] font-black uppercase text-slate-500 ${i === 3 ? 'text-right' : i > 0 ? 'text-center' : ''}`}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
+                {currentPayments.map((p: any) => (
+                  <tr key={p.id} className={`transition-colors group ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/80'}`}>
+                    <td className="px-6 md:px-8 py-4 md:py-6">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2">
+                          <User size={12} style={{ color: PRIMARY }} />
+                          <span className={`text-xs md:text-sm font-black ${textPrim} line-clamp-1`}>{p.guest_name || t('unknown')}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Home size={10} />
+                          <span className="text-[9px] font-bold uppercase tracking-tighter">{p.room_number || 'N/A'}{t('room_suffix')}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 md:px-8 py-4 md:py-6 text-center">
+                      <div className="inline-flex items-center gap-2">
+                        <div className="w-6 h-6 md:w-7 md:h-7 rounded-full flex items-center justify-center text-[9px] font-black"
+                          style={{ background: PRIMARY_BG, color: PRIMARY, border: `1px solid ${PRIMARY_BORDER}` }}>
+                          {p.cashier_name?.charAt(0) || 'K'}
+                        </div>
+                        <span className={`text-[10px] md:text-xs font-bold ${textMut}`}>{p.cashier_name || t('cashier')}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 md:px-8 py-4 md:py-6 text-center">
+                      <span className={`px-3 py-1 rounded-lg text-[8px] md:text-[9px] font-black uppercase tracking-widest border
+                        ${p.method === 'cash'
+                          ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                          : 'border'}`}
+                        style={p.method !== 'cash' ? { background: PRIMARY_BG, color: PRIMARY, borderColor: PRIMARY_BORDER } : {}}>
+                        {p.method}
+                      </span>
+                    </td>
+                    <td className="px-6 md:px-8 py-4 md:py-6 text-right">
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span className={`text-sm md:text-base font-black tracking-tight ${textPrim}`}>
+                          {parseFloat(p.amount).toLocaleString()} <span className="text-[9px] opacity-40 italic">UZS</span>
+                        </span>
+                        <div className="flex items-center gap-1 text-slate-500">
+                          <Clock size={10} />
+                          <span className="text-[8px] md:text-[9px] font-bold">
+                            {new Date(p.created_at).toLocaleString('uz-UZ', {
+                              hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination */}
         {totalPages > 1 && (
@@ -303,7 +303,7 @@ export function RevenuePage() {
           </div>
         )}
 
-        {filteredPayments.length === 0 && (
+        {!isLoading && filteredPayments.length === 0 && (
           <div className="py-16 md:py-20 text-center px-4">
             <Search className="mx-auto mb-4 opacity-20" size={40} style={{ color: PRIMARY }} />
             <p className="text-slate-500 font-bold uppercase text-[9px] md:text-[10px] tracking-widest">{t('no_data')}</p>
