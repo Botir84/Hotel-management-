@@ -112,11 +112,12 @@ export function DashboardPage() {
       </div>
 
       {/* Metrics — faqat birinchi kirishda animatsiya */}
-      <section className={isFirstLoad.current ? 'animate-in fade-in zoom-in-95 duration-1000 delay-150' : ''}>
+      <section>
         <MetricsCards
           rooms={rooms}
           reservations={checkins}
           incidents={[]}
+          animate={isFirstLoad.current}
         />
       </section>
 
