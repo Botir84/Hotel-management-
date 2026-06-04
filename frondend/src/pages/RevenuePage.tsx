@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   TrendingUp, Wallet, Receipt, PieChart,
@@ -33,7 +33,6 @@ function calcStats(data: any[]) {
   return { daily: d, monthly: m, yearly: y, total: t };
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
 function StatsSkeleton({ isDark }: { isDark: boolean }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 px-2 sm:px-0">
@@ -63,6 +62,9 @@ export function RevenuePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
+  // ✅ Birinchi yuklanishmi yoki refreshmi — shu farqni bilamiz
+  const isFirstLoad = useRef(true);
+
   const { data: rawData = [], isLoading, isFetching } = useQuery({
     queryKey: ['payments'],
     queryFn: async () => {
@@ -75,6 +77,13 @@ export function RevenuePage() {
     staleTime: 30_000,
     gcTime: 300_000,
   });
+
+  // ✅ Ma'lumot kelgandan keyin isFirstLoad ni false ga o'tkazamiz
+  useEffect(() => {
+    if (!isLoading && rawData.length >= 0) {
+      isFirstLoad.current = false;
+    }
+  }, [isLoading, rawData]);
 
   const stats = useMemo(() => calcStats(rawData), [rawData]);
 
@@ -108,7 +117,7 @@ export function RevenuePage() {
   const textPrim = isDark ? 'text-white' : 'text-slate-900';
   const textMut = isDark ? 'text-slate-500' : 'text-slate-400';
 
-  // ✅ Animatsiya uchun CSS
+  // ✅ Animatsiya faqat birinchi yuklanishda ishlaydi
   const animStyle = `
     @keyframes fadeSlideUp {
       from { opacity: 0; transform: translateY(16px); }
@@ -117,7 +126,21 @@ export function RevenuePage() {
     .anim-card {
       animation: fadeSlideUp 0.5s cubic-bezier(0.22,1,0.36,1) both;
     }
+    .no-anim {
+      animation: none !important;
+    }
   `;
+
+  // ✅ Birinchi yuklanishda animatsiya, refreshda yo'q
+  const animClass = (delay: number) =>
+    isFirstLoad.current
+      ? `anim-card`
+      : '';
+
+  const animStyleProp = (delay: number): React.CSSProperties =>
+    isFirstLoad.current
+      ? { animationDelay: `${delay}ms` }
+      : {};
 
   return (
     <>
@@ -160,19 +183,16 @@ export function RevenuePage() {
           </div>
         </div>
 
-        {/* Stats — ✅ key={String(isLoading)} animatsiyani qayta ishga tushiradi */}
+        {/* Stats */}
         {isLoading ? <StatsSkeleton isDark={isDark} /> : (
-          <div
-            key={`stats-${selectedDate}`}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 px-2 sm:px-0"
-          >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 px-2 sm:px-0">
             {selectedDate ? (
               <div
-                className="anim-card col-span-1 lg:col-span-4 p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border flex items-center justify-between text-white"
+                className={`${animClass(0)} col-span-1 lg:col-span-4 p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border flex items-center justify-between text-white`}
                 style={{
                   background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_LIGHT} 100%)`,
                   boxShadow: `0 16px 40px ${PRIMARY}40`,
-                  animationDelay: '0ms',
+                  ...animStyleProp(0),
                 }}>
                 <div>
                   <p className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] md:tracking-[0.3em] opacity-80">
@@ -193,11 +213,10 @@ export function RevenuePage() {
                 { label: t('this_year'), val: stats.yearly, icon: <PieChart size={20} />, color: PRIMARY_LIGHT, bg: 'rgba(122,151,173,0.12)' },
                 { label: t('total'), val: stats.total, icon: <Wallet size={20} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
               ].map((s, i) => (
-                // ✅ har karta alohida delay bilan chiqadi
                 <div
                   key={i}
-                  className={`anim-card p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all hover:-translate-y-1 ${cardBg}`}
-                  style={{ animationDelay: `${i * 80}ms` }}
+                  className={`${animClass(i * 80)} p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all hover:-translate-y-1 ${cardBg}`}
+                  style={animStyleProp(i * 80)}
                 >
                   <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center mb-4 md:mb-5"
                     style={{ background: s.bg, color: s.color }}>
@@ -247,12 +266,8 @@ export function RevenuePage() {
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
-                  {currentPayments.map((p: any, idx: number) => (
-                    <tr
-                      key={p.id}
-                      className={`transition-colors group anim-card ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/80'}`}
-                      style={{ animationDelay: `${idx * 40}ms` }}
-                    >
+                  {currentPayments.map((p: any) => (
+                    <tr key={p.id} className={`transition-colors ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/80'}`}>
                       <td className="px-6 md:px-8 py-4 md:py-6">
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-2">
@@ -276,9 +291,7 @@ export function RevenuePage() {
                       </td>
                       <td className="px-6 md:px-8 py-4 md:py-6 text-center">
                         <span className={`px-3 py-1 rounded-lg text-[8px] md:text-[9px] font-black uppercase tracking-widest border
-                          ${p.method === 'cash'
-                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                            : 'border'}`}
+                          ${p.method === 'cash' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'border'}`}
                           style={p.method !== 'cash' ? { background: PRIMARY_BG, color: PRIMARY, borderColor: PRIMARY_BORDER } : {}}>
                           {p.method}
                         </span>
@@ -305,13 +318,11 @@ export function RevenuePage() {
             </div>
           )}
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className={`p-4 md:p-6 border-t flex items-center justify-center gap-4
               ${isDark ? 'border-white/5 bg-white/[0.01]' : 'border-slate-100 bg-slate-50/50'}`}>
               <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1}
-                className={`p-2 rounded-xl border transition-all
-                  ${currentPage === 1 ? 'opacity-20 cursor-not-allowed' : ''}
+                className={`p-2 rounded-xl border transition-all ${currentPage === 1 ? 'opacity-20 cursor-not-allowed' : ''}
                   ${isDark ? 'border-white/10 text-white' : 'border-slate-200 text-slate-900'}`}>
                 <ChevronLeft size={18} />
               </button>
@@ -319,8 +330,7 @@ export function RevenuePage() {
                 {[...Array(totalPages)].map((_, i) => (
                   <button key={i} onClick={() => goToPage(i + 1)}
                     className={`min-w-[32px] md:min-w-[40px] h-8 md:h-10 rounded-xl text-[10px] font-black transition-all flex-shrink-0
-                      ${currentPage === i + 1
-                        ? 'text-white shadow-lg'
+                      ${currentPage === i + 1 ? 'text-white shadow-lg'
                         : `hover:bg-white/5 border ${isDark ? 'border-white/5 text-slate-400' : 'border-slate-200 text-slate-500'}`}`}
                     style={currentPage === i + 1
                       ? { background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_LIGHT} 100%)`, boxShadow: `0 4px 12px ${PRIMARY}40` }
@@ -330,8 +340,7 @@ export function RevenuePage() {
                 ))}
               </div>
               <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages}
-                className={`p-2 rounded-xl border transition-all
-                  ${currentPage === totalPages ? 'opacity-20 cursor-not-allowed' : ''}
+                className={`p-2 rounded-xl border transition-all ${currentPage === totalPages ? 'opacity-20 cursor-not-allowed' : ''}
                   ${isDark ? 'border-white/10 text-white' : 'border-slate-200 text-slate-900'}`}>
                 <ChevronRight size={18} />
               </button>
