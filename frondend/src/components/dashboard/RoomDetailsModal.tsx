@@ -283,7 +283,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                         </div>
                                         <div className="text-right">
                                             <p className="text-[9px] uppercase font-bold text-slate-500">{t('total_paid')}</p>
-                                            <p className="text-xl font-black text-[#5D7B93]">${totalPaid.toLocaleString()}</p>
+                                            <p className="text-xl font-black text-[#5D7B93]">{totalPaid.toLocaleString()}so'm</p>
                                         </div>
                                     </div>
                                     <div className="space-y-3 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
@@ -297,7 +297,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                                         {new Date(p.created_at).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
                                                     </span>
                                                 </div>
-                                                <span className="font-mono font-black text-emerald-500">+{Number(p.amount).toLocaleString()}So'm</span>
+                                                <span className="font-mono font-black text-emerald-500">+{Number(p.amount).toLocaleString()}so'm</span>
                                             </div>
                                         )) : (
                                             <p className="text-center text-xs text-slate-500 py-4 italic">{t('no_payments')}</p>
@@ -329,7 +329,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-[10px] font-bold text-emerald-600 uppercase">{t('additional_charge')}</p>
-                                                    <p className="text-2xl font-black text-emerald-600">+${extraChargeInfo.extraCharge}</p>
+                                                    <p className="text-2xl font-black text-emerald-600">+{extraChargeInfo.extraCharge}so'm</p>
                                                 </div>
                                             </div>
 
