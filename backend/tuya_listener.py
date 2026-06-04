@@ -1,5 +1,5 @@
 """
-Tuya Message Queue Consumer — To'liq ishlaydigan versiya
+Tuya Message Queue Consumer
 Ishlatish: python tuya_listener.py
 """
 import os
@@ -15,10 +15,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
 django.setup()
 
-from dotenv import load_dotenv
 from tuya_connector import TuyaOpenPulsar, TuyaCloudPulsarTopic
-
-load_dotenv()
 
 CLIENT_ID     = os.getenv("TUYA_CLIENT_ID")
 CLIENT_SECRET = os.getenv("TUYA_CLIENT_SECRET")
@@ -49,7 +46,6 @@ def handle_tuya_message(msg):
         biz_data = data.get("bizData", {})
 
         if biz_code != "devicePropertyMessage":
-            print(f"⏭️  Kerak emas: {biz_code}")
             return
 
         device_id  = biz_data.get("devId", "")
@@ -88,49 +84,39 @@ def handle_door_event(device_id, is_open):
 
     now = timezone.now()
 
-    # -------------------------------------------------------
     # Eshik YOPILDI
-    # -------------------------------------------------------
     if not is_open:
         try:
             room = Room.objects.get(tuya_device_id=device_id)
             room.door_status = 'closed'
             room.door_last_updated = now
             room.save(update_fields=['door_status', 'door_last_updated'])
-            print(f"💾 {room.number}-xona eshik statusi: YOPIQ → DB ga saqlandi.")
+            print(f"💾 {room.number}-xona: YOPIQ → saqlandi.")
         except Room.DoesNotExist:
-            print(f"⚠️  Device '{device_id}' hech qaysi xonaga biriktirilmagan!")
-        print("✅ Eshik yopildi — normal holat.")
+            print(f"⚠️  Device '{device_id}' xonaga biriktirilmagan!")
         print(f"{'='*50}")
         return
 
-    # -------------------------------------------------------
     # Eshik OCHILDI
-    # -------------------------------------------------------
     try:
         room = Room.objects.get(tuya_device_id=device_id)
     except Room.DoesNotExist:
-        print(f"⚠️  Device '{device_id}' hech qaysi xonaga biriktirilmagan!")
-        print(f"   Admin panelda Room ga tuya_device_id qo'shing.")
+        print(f"⚠️  Device '{device_id}' xonaga biriktirilmagan!")
         print(f"{'='*50}")
         return
 
-    # ✅ Eshik statusini DB ga saqlash
     room.door_status = 'open'
     room.door_last_updated = now
     room.save(update_fields=['door_status', 'door_last_updated'])
-    print(f"💾 {room.number}-xona eshik statusi: OCHIQ → DB ga saqlandi.")
-    print(f"🏠 Xona: {room.number} | CRM Holat: {room.status}")
+    print(f"💾 {room.number}-xona: OCHIQ → saqlandi. | CRM: {room.status}")
 
     risk_score = 0
     reasons    = []
 
-    # QOIDA 1: Bo'sh xona ochildi
     if room.status == 'available':
         risk_score += 80
         reasons.append(f"Bo'sh xona ({room.number}) ochildi!")
 
-    # QOIDA 2: Band xona — to'lov tekshiruv
     elif room.status == 'occupied':
         recent_payment = Payment.objects.filter(
             check_in__room=room,
@@ -140,18 +126,15 @@ def handle_door_event(device_id, is_open):
             risk_score += 55
             reasons.append(f"Xona {room.number} ochildi, to'lov topilmadi!")
         else:
-            print(f"✅ To'lov topildi (ID: {recent_payment.id}) — normal holat.")
+            print(f"✅ To'lov topildi — normal holat.")
             print(f"{'='*50}")
             return
 
-    # QOIDA 3: Tozalanmoqda
     elif room.status == 'dirty':
         risk_score += 20
-        reasons.append("Tozalanmoqda xona ochildi — xizmatchi bo'lishi mumkin.")
+        reasons.append("Tozalanmoqda xona ochildi.")
 
-    print(f"⚖️  Risk Score: {risk_score}/100")
-    if reasons:
-        print(f"   Sabablar: {', '.join(reasons)}")
+    print(f"⚖️  Risk: {risk_score}/100 | {', '.join(reasons)}")
 
     if risk_score >= 50:
         alert = SecurityAlert.objects.create(
@@ -161,10 +144,7 @@ def handle_door_event(device_id, is_open):
             room=room,
             risk_score=risk_score,
         )
-        print(f"\n🚨 ALERT yaratildi!")
-        print(f"   ID    : {alert.id}")
-        print(f"   Xona  : {room.number}")
-        print(f"   Score : {risk_score}")
+        print(f"🚨 ALERT #{alert.id} yaratildi! Xona: {room.number}")
     elif risk_score >= 20:
         print(f"⚠️  Past risk — log qilindi.")
     else:
@@ -183,41 +163,47 @@ def start_listener():
     print("=" * 60)
 
     if not CLIENT_ID or not CLIENT_SECRET:
-        print("❌ .env da TUYA_CLIENT_ID yoki TUYA_CLIENT_SECRET yo'q!")
-        return
+        print("❌ TUYA_CLIENT_ID yoki TUYA_CLIENT_SECRET yo'q!")
+        sys.exit(1)
 
     print(f"\n⚙️  Client ID  : {CLIENT_ID[:8]}...")
     print(f"   WS Endpoint: {WS_ENDPOINT}")
-    print(f"\n🔌 Tuya Message Queue ga ulanmoqda...")
+    print(f"\n🔌 Tuya ga ulanmoqda...")
 
-    try:
-        open_pulsar = TuyaOpenPulsar(
-            access_id=CLIENT_ID,
-            access_secret=CLIENT_SECRET,
-            ws_endpoint=WS_ENDPOINT,
-            topic=TuyaCloudPulsarTopic.TEST,
-        )
+    retry_count = 0
 
-        open_pulsar.add_message_listener(handle_tuya_message)
-        open_pulsar.start()
-
-        print("✅ Ulandi! Eshik hodisalari kutilmoqda...")
-        print("   Eshikni oching — signal kelishini ko'ring!")
-        print("   (To'xtatish: Ctrl+C)\n")
-
-        while True:
-            time.sleep(1)
-
-    except KeyboardInterrupt:
-        print("\n🛑 Listener to'xtatildi.")
+    while True:
         try:
-            open_pulsar.stop()
-        except Exception:
-            pass
-    except Exception as e:
-        print(f"❌ Ulanishda xato: {e}")
-        import traceback
-        traceback.print_exc()
+            open_pulsar = TuyaOpenPulsar(
+                access_id=CLIENT_ID,
+                access_secret=CLIENT_SECRET,
+                ws_endpoint=WS_ENDPOINT,
+                topic=TuyaCloudPulsarTopic.PROD,  # ✅ PROD — real sensorlar
+            )
+
+            open_pulsar.add_message_listener(handle_tuya_message)
+            open_pulsar.start()
+
+            retry_count = 0
+            print("✅ Ulandi! Sensorlar kutilmoqda...\n")
+
+            while True:
+                time.sleep(1)
+
+        except KeyboardInterrupt:
+            print("\n🛑 Listener to'xtatildi.")
+            try:
+                open_pulsar.stop()
+            except Exception:
+                pass
+            break
+
+        except Exception as e:
+            retry_count += 1
+            wait = min(30, retry_count * 5)  # max 30 soniya kutish
+            print(f"❌ Xato: {e}")
+            print(f"🔄 {wait} soniyadan keyin qayta ulanish... ({retry_count}-urinish)")
+            time.sleep(wait)
 
 
 if __name__ == "__main__":
