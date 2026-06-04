@@ -1,27 +1,32 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AlertProvider } from './contexts/AlertContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { Layout } from './components/layout/Layout';
-import { LoginPage } from './pages/LoginPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { RevenuePage } from './pages/RevenuePage';
-import { RoomsManagePage } from './pages/RoomsPage';
-import { ProfilePage } from './pages/profile/ProfilePage';
-import { SecurityPage } from './pages/SecurityPage';
+
+// ✅ Lazy loading — har sahifa alohida yuklanadi
+const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const RevenuePage = lazy(() => import('./pages/RevenuePage').then(m => ({ default: m.RevenuePage })));
+const RoomsManagePage = lazy(() => import('./pages/RoomsPage').then(m => ({ default: m.RoomsManagePage })));
+const ProfilePage = lazy(() => import('./pages/profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
+const SecurityPage = lazy(() => import('./pages/SecurityPage').then(m => ({ default: m.SecurityPage })));
+
+// ✅ Skeleton loader — sahifa o'tishda chiroyli ko'rinadi
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="w-10 h-10 border-2 border-[#5D7B93] border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function PrivateRoute({ children, adminOnly = false }: { children: JSX.Element; adminOnly?: boolean }) {
   const { user, loading, isAdmin } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="w-10 h-10 border-2 border-[#5D7B93] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
+  if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && !isAdmin) return <Navigate to="/dashboard" replace />;
 
@@ -44,37 +49,37 @@ function App() {
         <AuthProvider>
           <AlertProvider>
             <Router>
-              <Routes>
-                {/* Ochiq sahifa */}
-                <Route path="/login" element={<LoginPage />} />
+              {/* ✅ Suspense — lazy load bo'lguncha spinner */}
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
 
-                {/* Himoyalangan barcha sahifalar */}
-                <Route path="/" element={
-                  <PrivateRoute>
-                    <LayoutWrapper />
-                  </PrivateRoute>
-                }>
-                  <Route index element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/" element={
+                    <PrivateRoute>
+                      <LayoutWrapper />
+                    </PrivateRoute>
+                  }>
+                    <Route index element={<Navigate to="/dashboard" replace />} />
 
-                  {/* 1. Umumiy sahifalar (Admin + Kassir) */}
-                  <Route path="dashboard" element={<DashboardPage />} />
-                  <Route path="profile" element={<ProfilePage />} />
+                    {/* Umumiy sahifalar */}
+                    <Route path="dashboard" element={<DashboardPage />} />
+                    <Route path="profile" element={<ProfilePage />} />
 
-                  {/* 2. Faqat Admin uchun sahifalar */}
-                  <Route path="revenue" element={
-                    <PrivateRoute adminOnly><RevenuePage /></PrivateRoute>
-                  } />
-                  <Route path="rooms" element={
-                    <PrivateRoute adminOnly><RoomsManagePage /></PrivateRoute>
-                  } />
-                  <Route path="security" element={
-                    <PrivateRoute adminOnly><SecurityPage /></PrivateRoute>
-                  } />
-                </Route>
+                    {/* Faqat Admin */}
+                    <Route path="revenue" element={
+                      <PrivateRoute adminOnly><RevenuePage /></PrivateRoute>
+                    } />
+                    <Route path="rooms" element={
+                      <PrivateRoute adminOnly><RoomsManagePage /></PrivateRoute>
+                    } />
+                    <Route path="security" element={
+                      <PrivateRoute adminOnly><SecurityPage /></PrivateRoute>
+                    } />
+                  </Route>
 
-                {/* Noma'lum manzillar */}
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
-              </Routes>
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
+              </Suspense>
             </Router>
           </AlertProvider>
         </AuthProvider>
