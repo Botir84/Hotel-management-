@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BedDouble } from 'lucide-react';
 import {
-  LayoutGrid, ShieldAlert, Users, Hotel, CircleDollarSign,
+  LayoutGrid, ShieldAlert, Hotel, CircleDollarSign,
   LogOut, User, Sun, Moon, Globe, ChevronUp, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import { Page } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -26,7 +27,7 @@ interface NavItem {
   badge?: number;
 }
 
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
 
 const LANG_OPTIONS: { value: Lang; label: string; flag: string }[] = [
   { value: 'uz', label: "O'zbekcha", flag: '🇺🇿' },
@@ -43,56 +44,51 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const desktopDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState('');
+  // ✅ Bug 1: Avatar React Query bilan — har page o'tishda refresh yo'q
+  const { data: profileData } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => profileService.getProfile().then(r => r.data),
+    staleTime: 5 * 60_000,  // 5 daqiqa cache
+    gcTime: 30 * 60_000,
+  });
 
+  const avatarUrl = (() => {
+    const raw = profileData?.avatar || user?.avatar || null;
+    if (!raw) return null;
+    if (raw.startsWith('http')) return raw;
+    return `${API_BASE_URL}${raw.startsWith('/') ? raw : '/' + raw}`;
+  })();
+
+  const displayName = profileData?.first_name || user?.first_name || user?.username || '';
+
+  const getInitials = () =>
+    displayName ? displayName[0].toUpperCase() : user?.username?.slice(0, 2).toUpperCase() || 'U';
+
+  // ✅ Bug 2 & 3: Outside click — desktop va mobil alohida
   useEffect(() => {
-    profileService.getProfile()
-      .then((res) => {
-        const data = res.data;
-        let url: string | null = data.avatar || null;
-        if (url && !url.startsWith('http')) {
-          url = `${API_BASE_URL}${url.startsWith('/') ? url : '/' + url}`;
-        }
-        setAvatarUrl(url);
-        setDisplayName(data.first_name || data.username || '');
-      })
-      .catch(() => {
-        const raw = user?.avatar || null;
-        if (raw && !raw.startsWith('http')) {
-          setAvatarUrl(`${API_BASE_URL}${raw.startsWith('/') ? raw : '/' + raw}`);
-        } else {
-          setAvatarUrl(raw);
-        }
-        setDisplayName(user?.first_name || user?.username || '');
-      });
-  }, []);
-
-  const getInitials = () => {
-    if (displayName) return displayName[0].toUpperCase();
-    return user?.username?.slice(0, 2).toUpperCase() || 'U';
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const inDesktop = desktopDropdownRef.current?.contains(target);
+      const inMobile = mobileDropdownRef.current?.contains(target);
+      if (!inDesktop && !inMobile) {
         setIsProfileOpen(false);
         setIsLangOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const unresolvedIncidents = incidents ? incidents.filter(i => !i.investigated).length : 0;
+  const unresolvedIncidents = incidents?.filter(i => !i.investigated).length ?? 0;
 
   const navItems: NavItem[] = [
     { id: 'dashboard', labelKey: 'nav_reception', icon: <LayoutGrid size={22} /> },
-    { id: 'revenue', labelKey: 'nav_revenue', icon: <CircleDollarSign size={22} />, adminOnly: true, badge: unresolvedIncidents },
+    { id: 'revenue', labelKey: 'nav_revenue', icon: <CircleDollarSign size={22} />, adminOnly: true },
     { id: 'rooms', labelKey: 'nav_rooms', icon: <BedDouble size={22} />, adminOnly: true },
-    { id: 'security', labelKey: 'nav_security', icon: <ShieldAlert size={22} />, adminOnly: true },
+    { id: 'security', labelKey: 'nav_security', icon: <ShieldAlert size={22} />, adminOnly: true, badge: unresolvedIncidents },
   ];
 
   const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin);
@@ -100,9 +96,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const bgClass = isDark
     ? 'bg-[#0f172a]/80 backdrop-blur-lg border-white/5'
     : 'bg-white/80 backdrop-blur-lg border-slate-200 shadow-2xl';
-
   const textMuted = isDark ? 'text-slate-500' : 'text-[#A2B3C1]';
-
   const activeItemStyle = isDark
     ? 'bg-[#5D7B93]/20 text-white'
     : 'bg-[#5D7B93]/10 text-[#5D7B93]';
@@ -123,14 +117,96 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           }}
         />
       ) : (
-        <div
-          style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#5D7B93,#7a9ab3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: size * 0.32 }}
-        >
+        <div style={{
+          width: '100%', height: '100%',
+          background: 'linear-gradient(135deg,#5D7B93,#7a9ab3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontWeight: 900, fontSize: size * 0.32,
+        }}>
           {getInitials()}
         </div>
       )}
     </div>
   );
+
+  // ✅ ProfileMenuItems — inline component sifatida, props orqali emas
+  const ProfileMenuContent = () => {
+    const currentLang = LANG_OPTIONS.find(l => l.value === lang);
+    return (
+      <div className="space-y-1 py-1">
+        {/* Profil */}
+        <button
+          onClick={() => { navigate('/profile'); setIsProfileOpen(false); }}
+          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all"
+        >
+          <User size={18} className="text-[#5D7B93]" />
+          <span>{t('my_profile')}</span>
+        </button>
+
+        {/* ✅ Bug 2: Tema — to'g'ridan toggleTheme chaqiradi */}
+        <button
+          onClick={() => { toggleTheme(); }}
+          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all"
+        >
+          {isDark
+            ? <Sun size={18} className="text-amber-400" />
+            : <Moon size={18} className="text-indigo-500" />
+          }
+          <span>{isDark ? t('theme_light') : t('theme_dark')}</span>
+        </button>
+
+        {/* ✅ Bug 3: Til — to'g'ridan setLang chaqiradi */}
+        <div className="relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); setIsLangOpen(p => !p); }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all"
+          >
+            <span className="text-lg">{currentLang?.flag}</span>
+            <span>{t('language')}</span>
+            <span className="ml-auto text-xs font-black text-[#5D7B93] uppercase">{lang}</span>
+          </button>
+
+          <AnimatePresence>
+            {isLangOpen && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 4 }}
+                className={`absolute bottom-full left-0 mb-1 w-48 rounded-2xl border shadow-2xl py-2 z-[200]
+                  ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}
+              >
+                {LANG_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={(e) => { e.stopPropagation(); setLang(opt.value); setIsLangOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold transition-all
+                      ${lang === opt.value
+                        ? 'text-[#5D7B93] bg-[#5D7B93]/10'
+                        : isDark ? 'text-slate-300 hover:bg-white/5' : 'text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    <span className="text-lg">{opt.flag}</span>
+                    <span>{opt.label}</span>
+                    {lang === opt.value && <Check size={14} className="ml-auto text-[#5D7B93]" />}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <div className="h-px bg-slate-500/10 my-2 mx-2" />
+
+        {/* Chiqish */}
+        <button
+          onClick={signOut}
+          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-black text-red-500 rounded-2xl hover:bg-red-500/10 transition-all"
+        >
+          <LogOut size={18} />
+          <span>{t('logout')}</span>
+        </button>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -145,7 +221,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         `}
         onMouseLeave={() => { setIsProfileOpen(false); setIsLangOpen(false); }}
       >
-        {/* 1. Logo */}
+        {/* Logo */}
         <div className="flex items-center gap-4 px-5 py-8 h-24 relative overflow-hidden shrink-0">
           <div
             className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-[#5D7B93]/30 z-10"
@@ -161,7 +237,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           </div>
         </div>
 
-        {/* 2. Nav Items */}
+        {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto custom-scrollbar">
           <div className="px-4 py-2 mb-2 overflow-hidden shrink-0">
             <p className={`text-[10px] font-black uppercase tracking-[0.25em] ${textMuted} opacity-0 group-hover:opacity-100 transition-all duration-500`}>
@@ -199,10 +275,10 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           })}
         </nav>
 
-        {/* 3. Footer / Profile */}
+        {/* Profile footer */}
         <div
           className={`p-3 border-t relative shrink-0 ${isDark ? 'border-white/5' : 'border-slate-100'}`}
-          ref={dropdownRef}
+          ref={desktopDropdownRef}
         >
           <AnimatePresence>
             {isProfileOpen && (
@@ -213,7 +289,6 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 className={`absolute bottom-full left-3 right-3 mb-4 rounded-2xl border shadow-2xl py-3 z-[110]
                   ${isDark ? 'bg-slate-900 border-slate-800 text-slate-300' : 'bg-white border-gray-100 text-gray-700'}`}
               >
-                {/* Mini profile header in dropdown */}
                 <div className="flex items-center gap-3 px-4 py-2 mb-2 border-b border-slate-500/10">
                   <AvatarCircle size={36} border={false} />
                   <div className="overflow-hidden">
@@ -225,18 +300,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                     </p>
                   </div>
                 </div>
-                <ProfileMenuItems
-                  navigate={navigate}
-                  setIsProfileOpen={setIsProfileOpen}
-                  toggleTheme={toggleTheme}
-                  isDark={isDark}
-                  signOut={signOut}
-                  lang={lang}
-                  setLang={setLang}
-                  isLangOpen={isLangOpen}
-                  setIsLangOpen={setIsLangOpen}
-                  t={t}
-                />
+                <ProfileMenuContent />
               </motion.div>
             )}
           </AnimatePresence>
@@ -269,6 +333,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       {/* ══════════════ MOBILE BOTTOM NAV ══════════════ */}
       <div
         className={`lg:hidden fixed bottom-0 left-0 right-0 z-[100] border-t px-2 pb-safe-area shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)] ${bgClass}`}
+        ref={mobileDropdownRef}
       >
         <div className="flex items-center justify-around h-16 max-w-md mx-auto">
           {visibleItems.map((item) => {
@@ -283,14 +348,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-[#5D7B93]/10 scale-110' : ''}`}>
                   {item.icon}
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-tighter">{t(item.labelKey as any)}</span>
+                <span className="text-[9px] font-bold uppercase tracking-tighter">{t(item.labelKey as any)}</span>
               </button>
             );
           })}
 
           {/* Mobile profile button */}
           <button
-            onClick={() => setIsProfileOpen(!isProfileOpen)}
+            onClick={() => { setIsProfileOpen(!isProfileOpen); setIsLangOpen(false); }}
             className={`flex flex-col items-center justify-center gap-1 flex-1 h-full
               ${isProfileOpen ? 'text-[#5D7B93]' : 'text-slate-400'}`}
           >
@@ -299,18 +364,18 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             >
               <AvatarCircle size={32} border={false} />
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-tighter">{t('nav_profile')}</span>
+            <span className="text-[9px] font-bold uppercase tracking-tighter">{t('nav_profile')}</span>
           </button>
         </div>
 
-        {/* Mobile profile popup */}
+        {/* ✅ Mobile profile popup — z-index yuqori, to'g'ri ishlaydi */}
         <AnimatePresence>
           {isProfileOpen && (
             <motion.div
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 100 }}
-              className={`absolute bottom-[calc(100%+8px)] left-4 right-4 rounded-[2rem] border shadow-2xl py-4 z-[110]
+              className={`absolute bottom-[calc(100%+8px)] left-4 right-4 rounded-[2rem] border shadow-2xl py-4 z-[150]
                 ${isDark ? 'bg-slate-900 border-white/5 text-slate-300' : 'bg-white border-slate-100 text-slate-700'}`}
             >
               <div className="flex items-center gap-4 px-6 pb-4 border-b border-slate-500/10 mb-2">
@@ -323,104 +388,12 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 </div>
               </div>
               <div className="px-4">
-                <ProfileMenuItems
-                  navigate={navigate}
-                  setIsProfileOpen={setIsProfileOpen}
-                  toggleTheme={toggleTheme}
-                  isDark={isDark}
-                  signOut={signOut}
-                  lang={lang}
-                  setLang={setLang}
-                  isLangOpen={isLangOpen}
-                  setIsLangOpen={setIsLangOpen}
-                  t={t}
-                />
+                <ProfileMenuContent />
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
     </>
-  );
-}
-
-// ── ProfileMenuItems ──────────────────────────────────────────────────────────
-function ProfileMenuItems({ navigate, setIsProfileOpen, toggleTheme, isDark, signOut, lang, setLang, isLangOpen, setIsLangOpen, t }: any) {
-  const currentLang = LANG_OPTIONS.find(l => l.value === lang);
-
-  return (
-    <div className="space-y-1 py-1">
-      {/* Profil */}
-      <button
-        onClick={() => { navigate('/profile'); setIsProfileOpen(false); }}
-        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all"
-      >
-        <User size={18} className="text-[#5D7B93]" />
-        <span>{t('my_profile')}</span>
-      </button>
-
-      {/* Tema */}
-      <button
-        onClick={toggleTheme}
-        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all"
-      >
-        {isDark
-          ? <Sun size={18} className="text-amber-400" />
-          : <Moon size={18} className="text-indigo-500" />
-        }
-        <span>{isDark ? t('theme_light') : t('theme_dark')}</span>
-      </button>
-
-      {/* Til tanlash */}
-      <div className="relative">
-        <button
-          onClick={() => setIsLangOpen((p: boolean) => !p)}
-          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-2xl hover:bg-[#5D7B93]/10 transition-all"
-        >
-          <span className="text-lg">{currentLang?.flag}</span>
-          <span>{t('language')}</span>
-          <span className="ml-auto text-xs font-black text-[#5D7B93] uppercase">{lang}</span>
-        </button>
-
-        {/* Til dropdown */}
-        <AnimatePresence>
-          {isLangOpen && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 4 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 4 }}
-              className={`absolute bottom-full left-0 mb-1 w-48 rounded-2xl border shadow-2xl py-2 z-[120]
-                ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}
-            >
-              {LANG_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => { setLang(opt.value); setIsLangOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold transition-all
-                    ${lang === opt.value
-                      ? 'text-[#5D7B93] bg-[#5D7B93]/10'
-                      : isDark ? 'text-slate-300 hover:bg-white/5' : 'text-slate-600 hover:bg-slate-50'}`}
-                >
-                  <span className="text-lg">{opt.flag}</span>
-                  <span>{opt.label}</span>
-                  {lang === opt.value && <Check size={14} className="ml-auto text-[#5D7B93]" />}
-                </button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      <div className="h-px bg-slate-500/10 my-2 mx-2" />
-
-      {/* Chiqish */}
-      <button
-        onClick={signOut}
-        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-black text-red-500 rounded-2xl hover:bg-red-500/10 transition-all"
-      >
-        <LogOut size={18} />
-        <span>{t('logout')}</span>
-      </button>
-    </div>
   );
 }
