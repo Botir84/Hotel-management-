@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { Room, Reservation } from '../types';
@@ -11,7 +11,6 @@ import { RoomGrid } from '../components/dashboard/RoomGrid';
 import { CheckInModal } from '../components/checkin/CheckInModal';
 import { RoomDetailsModal } from '../components/dashboard/RoomDetailsModal';
 
-// ─── Fetch funksiyalari ───────────────────────────────────────────────────────
 const fetchRooms = async (): Promise<Room[]> => {
   const res = await roomService.getRooms();
   return Array.isArray(res.data) ? res.data : (res.data?.results || []);
@@ -27,28 +26,22 @@ export function DashboardPage() {
   const { isDark } = useTheme();
   const queryClient = useQueryClient();
 
+  // ✅ Birinchi yuklanishmi yoki refreshmi
+  const isFirstLoad = useRef(true);
+
   const [selectedRoom, setSelectedRoom] = useState<Room | undefined>();
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  // ✅ React Query — rooms cache
-  const {
-    data: rooms = [],
-    isLoading: roomsLoading,
-    isFetching: roomsFetching,
-  } = useQuery({
+  const { data: rooms = [], isLoading: roomsLoading, isFetching: roomsFetching } = useQuery({
     queryKey: ['rooms'],
     queryFn: fetchRooms,
-    staleTime: 30_000,   // 30 soniya cache
+    staleTime: 30_000,
     gcTime: 300_000,
-    refetchInterval: 120_000,  // 2 daqiqada avtomatik yangilash
+    refetchInterval: 120_000,
   });
 
-  // ✅ React Query — checkins cache
-  const {
-    data: checkins = [],
-    isLoading: checkinsLoading,
-  } = useQuery({
+  const { data: checkins = [], isLoading: checkinsLoading } = useQuery({
     queryKey: ['checkins'],
     queryFn: fetchCheckins,
     staleTime: 30_000,
@@ -59,7 +52,11 @@ export function DashboardPage() {
   const loading = roomsLoading || checkinsLoading;
   const refreshing = roomsFetching;
 
-  // ✅ Refresh — cache ni invalidate qiladi
+  // ✅ Ma'lumot kelgandan keyin isFirstLoad false ga o'tadi
+  useEffect(() => {
+    if (!loading) isFirstLoad.current = false;
+  }, [loading]);
+
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['rooms'] });
     queryClient.invalidateQueries({ queryKey: ['checkins'] });
@@ -114,8 +111,8 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Metrics */}
-      <section className="animate-in fade-in zoom-in-95 duration-1000 delay-150">
+      {/* Metrics — faqat birinchi kirishda animatsiya */}
+      <section className={isFirstLoad.current ? 'animate-in fade-in zoom-in-95 duration-1000 delay-150' : ''}>
         <MetricsCards
           rooms={rooms}
           reservations={checkins}
@@ -123,8 +120,10 @@ export function DashboardPage() {
         />
       </section>
 
-      {/* Room Grid */}
-      <section className="relative min-h-[400px]">
+      {/* Room Grid — faqat birinchi kirishda animatsiya */}
+      <section
+        className={`relative min-h-[400px] ${isFirstLoad.current ? 'animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300' : ''}`}
+      >
         <RoomGrid
           rooms={rooms}
           onRoomClick={handleRoomClick}
