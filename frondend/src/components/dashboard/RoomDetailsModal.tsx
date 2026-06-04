@@ -297,7 +297,7 @@ export function RoomDetailsModal({ isOpen, room, reservation, onClose, onSuccess
                                                         {new Date(p.created_at).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
                                                     </span>
                                                 </div>
-                                                <span className="font-mono font-black text-emerald-500">+${Number(p.amount).toLocaleString()}</span>
+                                                <span className="font-mono font-black text-emerald-500">+{Number(p.amount).toLocaleString()}So'm</span>
                                             </div>
                                         )) : (
                                             <p className="text-center text-xs text-slate-500 py-4 italic">{t('no_payments')}</p>
