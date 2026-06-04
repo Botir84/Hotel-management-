@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BedDouble, Plus, Trash2, Save, X, Edit2,
   RefreshCw, Search, DoorOpen, DoorClosed,
@@ -63,22 +64,15 @@ function FormModal({ mode, initial, onClose, onSave, isDark }: {
   const labelCls = `block text-[10px] font-black mb-1.5 uppercase tracking-[0.15em]`;
 
   return createPortal(
-    // ✅ items-center + p-4 — o'rtada
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
       style={{ background: 'rgba(2,6,23,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-
-      {/* ✅ rounded-[2rem] — to'liq yumaloq */}
       <div className={`w-full max-w-lg rounded-[2rem] border overflow-hidden shadow-2xl
         ${isDark ? 'bg-[#0f172a] border-white/5' : 'bg-white border-slate-200'}`}
         style={{ maxHeight: '90vh', overflowY: 'auto' }}>
-
-        {/* Handle bar */}
         <div className="flex justify-center pt-3 pb-1">
           <div className={`w-10 h-1 rounded-full ${isDark ? 'bg-white/15' : 'bg-slate-200'}`} />
         </div>
-
-        {/* Header */}
         <div className={`px-6 py-5 flex items-center justify-between border-b ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: PRIMARY_BG }}>
@@ -97,8 +91,6 @@ function FormModal({ mode, initial, onClose, onSave, isDark }: {
             <X size={18} />
           </button>
         </div>
-
-        {/* Body */}
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -132,9 +124,7 @@ function FormModal({ mode, initial, onClose, onSave, isDark }: {
               <input className={inputCls} value={form.tuya_device_id || ''} onChange={e => set('tuya_device_id', e.target.value)} placeholder="bf6aecb38b..." />
             </div>
           </div>
-
           {error && <p className="px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold">⚠ {error}</p>}
-
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className={`flex-1 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all
               ${isDark ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
@@ -158,10 +148,8 @@ function FormModal({ mode, initial, onClose, onSave, isDark }: {
 function DeleteConfirm({ onCancel, onConfirm, isDark }: { onCancel: () => void; onConfirm: () => void; isDark: boolean }) {
   const { t } = useLang();
   return createPortal(
-    // ✅ items-center + p-4 — o'rtada
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
       style={{ background: 'rgba(2,6,23,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-      {/* ✅ rounded-[2rem] — to'liq yumaloq */}
       <div className={`w-full max-w-sm rounded-[2rem] border p-6 shadow-2xl
         ${isDark ? 'bg-[#0f172a] border-white/5' : 'bg-white border-slate-200'}`}>
         <div className="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mb-4">
@@ -185,13 +173,23 @@ function DeleteConfirm({ onCancel, onConfirm, isDark }: { onCancel: () => void; 
   );
 }
 
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+function TableSkeleton({ isDark }: { isDark: boolean }) {
+  return (
+    <div className="space-y-3 p-6">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className={`h-14 rounded-2xl animate-pulse ${isDark ? 'bg-white/5' : 'bg-slate-100'}`} />
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function RoomsManagePage() {
   const { isDark } = useTheme();
   const { t } = useLang();
+  const queryClient = useQueryClient();
 
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [modal, setModal] = useState<ModalMode>(null);
@@ -199,25 +197,36 @@ export function RoomsManagePage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const fetchRooms = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await roomService.getRooms();
-      setRooms(res.data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ✅ React Query — cache bilan fetch
+  const { data: rooms = [], isLoading, isFetching } = useQuery({
+    queryKey: ['rooms'],
+    queryFn: () => roomService.getRooms().then(r => r.data as Room[]),
+    staleTime: 30_000,   // 30 soniya cache — sahifa o'tganda qayta fetch yo'q
+    gcTime: 300_000,   // 5 daqiqa xotirada
+  });
 
-  useEffect(() => { fetchRooms(); }, [fetchRooms]);
+  // ✅ Mutations — o'zgarishdan keyin cache yangilanadi
+  const createMutation = useMutation({
+    mutationFn: (f: Partial<Room>) => roomService.createRoom(f),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rooms'] }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Room> }) => roomService.updateRoom(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rooms'] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => roomService.deleteRoom(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rooms'] }),
+  });
+
   useEffect(() => { setCurrentPage(1); }, [search, filterStatus]);
 
-  const handleCreate = async (f: Partial<Room>) => { await roomService.createRoom(f); await fetchRooms(); };
-  const handleUpdate = async (f: Partial<Room>) => { await roomService.updateRoom(editRoom!.id, f); await fetchRooms(); };
+  const handleCreate = async (f: Partial<Room>) => { await createMutation.mutateAsync(f); };
+  const handleUpdate = async (f: Partial<Room>) => { await updateMutation.mutateAsync({ id: editRoom!.id, data: f }); };
   const handleDelete = async (id: number) => {
-    try { await roomService.deleteRoom(id); setRooms(p => p.filter(r => r.id !== id)); }
+    try { await deleteMutation.mutateAsync(id); }
     catch { alert(t('delete_title')); }
     finally { setDeleteId(null); }
   };
@@ -250,15 +259,6 @@ export function RoomsManagePage() {
   const textPrim = isDark ? 'text-white' : 'text-slate-900';
   const textMut = isDark ? 'text-slate-500' : 'text-slate-400';
 
-  if (loading) {
-    return (
-      <div className="h-[70vh] flex flex-col items-center justify-center gap-6">
-        <Loader2 size={40} className="animate-spin" style={{ color: PRIMARY }} />
-        <p className={`text-xs font-black uppercase tracking-[0.3em] ${textMut}`}>{t('loading')}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 md:space-y-8 pb-10 px-2 sm:px-0 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
@@ -274,10 +274,11 @@ export function RoomsManagePage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={fetchRooms}
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['rooms'] })}
             className={`group flex items-center gap-2 px-5 py-3 rounded-xl md:rounded-2xl font-bold text-sm transition-all active:scale-95 border
               ${isDark ? 'border-white/10 hover:bg-white/5 text-slate-400' : 'border-slate-200 hover:bg-slate-50 text-slate-500'}`}>
-            <RefreshCw size={16} className="group-active:rotate-180 transition-transform duration-500" />
+            <RefreshCw size={16} className={`transition-transform duration-500 ${isFetching ? 'animate-spin' : 'group-active:rotate-180'}`} />
             {t('refresh')}
           </button>
           <button onClick={() => { setEditRoom(null); setModal('add'); }}
@@ -342,89 +343,91 @@ export function RoomsManagePage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[700px]">
-            <thead>
-              <tr className={isDark ? 'bg-white/5' : 'bg-slate-50'}>
-                {['#', t('rooms_list'), t('category'), t('price'), t('size'), t('status'), t('door_open'), ''].map((h, i) => (
-                  <th key={i} className={`px-5 md:px-7 py-4 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-500 ${i === 7 ? 'text-right' : ''}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
-              {paginated.map((room) => {
-                const ss = STATUS_STYLE[room.status] || STATUS_STYLE.available;
-                const isOpen = room.door_status === 'open';
-                return (
-                  <tr key={room.id} className={`transition-colors group ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/80'}`}>
-                    <td className="px-5 md:px-7 py-4 md:py-5">
-                      <span className="text-[10px] font-bold text-slate-500">{room.id}</span>
-                    </td>
-                    <td className="px-5 md:px-7 py-4 md:py-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: PRIMARY_BG }}>
-                          <BedDouble size={15} style={{ color: PRIMARY }} />
+        {/* Table yoki Skeleton */}
+        {isLoading ? <TableSkeleton isDark={isDark} /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left min-w-[700px]">
+              <thead>
+                <tr className={isDark ? 'bg-white/5' : 'bg-slate-50'}>
+                  {['#', t('rooms_list'), t('category'), t('price'), t('size'), t('status'), t('door_open'), ''].map((h, i) => (
+                    <th key={i} className={`px-5 md:px-7 py-4 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-500 ${i === 7 ? 'text-right' : ''}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
+                {paginated.map((room) => {
+                  const ss = STATUS_STYLE[room.status] || STATUS_STYLE.available;
+                  const isOpen = room.door_status === 'open';
+                  return (
+                    <tr key={room.id} className={`transition-colors group ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/80'}`}>
+                      <td className="px-5 md:px-7 py-4 md:py-5">
+                        <span className="text-[10px] font-bold text-slate-500">{room.id}</span>
+                      </td>
+                      <td className="px-5 md:px-7 py-4 md:py-5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: PRIMARY_BG }}>
+                            <BedDouble size={15} style={{ color: PRIMARY }} />
+                          </div>
+                          <div>
+                            <p className={`text-sm font-black ${textPrim}`}>{room.number}</p>
+                            {room.tuya_device_id && (
+                              <p className="text-[9px] font-bold text-violet-500 flex items-center gap-1">
+                                <Wifi size={8} />{room.tuya_device_id.slice(0, 12)}…
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <p className={`text-sm font-black ${textPrim}`}>{room.number}</p>
-                          {room.tuya_device_id && (
-                            <p className="text-[9px] font-bold text-violet-500 flex items-center gap-1">
-                              <Wifi size={8} />{room.tuya_device_id.slice(0, 12)}…
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 md:px-7 py-4 md:py-5">
-                      <span className={`text-xs font-bold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{room.chategory}</span>
-                    </td>
-                    <td className="px-5 md:px-7 py-4 md:py-5">
-                      <span className={`text-sm font-black ${textPrim}`}>${Number(room.price_per_night).toFixed(0)}</span>
-                      <span className="text-[9px] text-slate-500 font-bold italic"> /k</span>
-                    </td>
-                    <td className="px-5 md:px-7 py-4 md:py-5">
-                      <span className={`text-xs font-bold flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                        <Maximize2 size={10} />{room.size_room || 25}m²
-                      </span>
-                    </td>
-                    <td className="px-5 md:px-7 py-4 md:py-5">
-                      <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border inline-flex items-center gap-1.5 ${ss.color} ${ss.bg} ${ss.border}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />
-                        {room.status === 'available' ? t('available') : room.status === 'occupied' ? t('occupied') : t('dirty')}
-                      </span>
-                    </td>
-                    <td className="px-5 md:px-7 py-4 md:py-5">
-                      {room.tuya_device_id ? (
-                        <span className={`text-xs font-bold flex items-center gap-1.5 ${isOpen ? 'text-red-500' : 'text-emerald-500'}`}>
-                          {isOpen ? <DoorOpen size={13} /> : <DoorClosed size={13} />}
-                          {isOpen ? t('door_open') : t('door_closed')}
+                      </td>
+                      <td className="px-5 md:px-7 py-4 md:py-5">
+                        <span className={`text-xs font-bold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{room.chategory}</span>
+                      </td>
+                      <td className="px-5 md:px-7 py-4 md:py-5">
+                        <span className={`text-sm font-black ${textPrim}`}>${Number(room.price_per_night).toFixed(0)}</span>
+                        <span className="text-[9px] text-slate-500 font-bold italic"> /k</span>
+                      </td>
+                      <td className="px-5 md:px-7 py-4 md:py-5">
+                        <span className={`text-xs font-bold flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                          <Maximize2 size={10} />{room.size_room || 25}m²
                         </span>
-                      ) : (
-                        <span className="text-xs text-slate-500 flex items-center gap-1"><WifiOff size={11} /> —</span>
-                      )}
-                    </td>
-                    <td className="px-5 md:px-7 py-4 md:py-5 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => { setEditRoom(room); setModal('edit'); }}
-                          className={`p-2 rounded-xl transition-all ${isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}>
-                          <Edit2 size={14} />
-                        </button>
-                        <button onClick={() => setDeleteId(room.id)}
-                          className="p-2 rounded-xl hover:bg-red-500/10 text-red-500 transition-all">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                      <td className="px-5 md:px-7 py-4 md:py-5">
+                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border inline-flex items-center gap-1.5 ${ss.color} ${ss.bg} ${ss.border}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />
+                          {room.status === 'available' ? t('available') : room.status === 'occupied' ? t('occupied') : t('dirty')}
+                        </span>
+                      </td>
+                      <td className="px-5 md:px-7 py-4 md:py-5">
+                        {room.tuya_device_id ? (
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${isOpen ? 'text-red-500' : 'text-emerald-500'}`}>
+                            {isOpen ? <DoorOpen size={13} /> : <DoorClosed size={13} />}
+                            {isOpen ? t('door_open') : t('door_closed')}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-500 flex items-center gap-1"><WifiOff size={11} /> —</span>
+                        )}
+                      </td>
+                      <td className="px-5 md:px-7 py-4 md:py-5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => { setEditRoom(room); setModal('edit'); }}
+                            className={`p-2 rounded-xl transition-all ${isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}>
+                            <Edit2 size={14} />
+                          </button>
+                          <button onClick={() => setDeleteId(room.id)}
+                            className="p-2 rounded-xl hover:bg-red-500/10 text-red-500 transition-all">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Empty */}
-        {filtered.length === 0 && (
+        {!isLoading && filtered.length === 0 && (
           <div className="py-16 text-center">
             <BedDouble className="mx-auto opacity-20 mb-3" size={36} />
             <p className="text-slate-500 font-bold uppercase text-[10px] tracking-widest">{t('not_found')}</p>
