@@ -65,7 +65,7 @@ def send_door_event(device_id: str, is_open: bool):
     """Backend API ga eshik hodisasini yuboradi."""
     try:
         response = requests.post(
-            f"{API_BASE_URL}/door-event/",
+            f"{API_BASE_URL}/door-status/",
             json={
                 "device_id": device_id,
                 "is_open":   is_open,
