@@ -18,7 +18,7 @@ export function ProfilePage() {
     const [updating, setUpdating] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const API_BASE_URL = 'http://127.0.0.1:8000';
+    const API_BASE_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
 
     const [formData, setFormData] = useState({
         first_name: '',
@@ -139,43 +139,71 @@ export function ProfilePage() {
         .pp-cancel-btn { transition: background .18s; }
         .pp-page::-webkit-scrollbar { width: 4px; }
         .pp-page::-webkit-scrollbar-thumb { background: rgba(93,123,147,0.25); border-radius: 99px; }
+
+        /* ✅ Mobil: hero row vertikal, markazda */
         @media (max-width: 640px) {
-          .pp-hero-row { flex-direction: column !important; align-items: center !important; text-align: center !important; }
+          .pp-hero-row {
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+            gap: 16px !important;
+          }
+          .pp-hero-left {
+            flex-direction: column !important;
+            align-items: center !important;
+            gap: 12px !important;
+          }
+          .pp-hero-text {
+            align-items: center !important;
+          }
+          /* ✅ Edit button mobilda to'liq kenglikda pastda */
+          .pp-edit-btn-wrap {
+            width: 100% !important;
+          }
+          .pp-edit-btn {
+            width: 100% !important;
+          }
           .pp-grid-2 { grid-template-columns: 1fr !important; }
           .pp-view-grid { grid-template-columns: 1fr !important; }
-          .pp-hero-text { align-items: center !important; }
+          .pp-body-pad { padding: 20px 16px 24px !important; }
+          .pp-hero-pad { padding: 28px 20px !important; }
         }
       `}</style>
 
             <div className="pp pp-page"
-                style={{ background: pageBg, minHeight: '100vh', padding: '32px 16px 60px', overflowY: 'auto', color: txt }}>
+                style={{ background: pageBg, minHeight: '100vh', padding: '16px 12px 80px', overflowY: 'auto', color: txt }}>
                 <div style={{ maxWidth: 860, margin: '0 auto' }}>
 
                     <div style={{
                         background: cardBg, border: `1px solid ${cardBdr}`,
-                        borderRadius: 40, overflow: 'hidden',
+                        borderRadius: 32, overflow: 'hidden',
                         boxShadow: isDark ? '0 32px 80px rgba(0,0,0,0.45)' : '0 8px 40px rgba(93,123,147,0.12)',
                     }}>
 
                         {/* HERO BANNER */}
-                        <div style={{
-                            background: 'linear-gradient(135deg, #3d5f74 0%, #5D7B93 50%, #7a9ab3 100%)',
-                            padding: '44px 40px', position: 'relative', overflow: 'hidden',
-                        }}>
+                        <div
+                            className="pp-hero-pad"
+                            style={{
+                                background: 'linear-gradient(135deg, #3d5f74 0%, #5D7B93 50%, #7a9ab3 100%)',
+                                padding: '44px 40px', position: 'relative', overflow: 'hidden',
+                            }}>
                             <div style={{ position: 'absolute', top: -70, right: -70, width: 280, height: 280, borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
                             <div style={{ position: 'absolute', bottom: -50, left: '35%', width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
 
-                            <div className="pp-hero-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, position: 'relative', zIndex: 2 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+                            {/* ✅ Hero row: desktop gorizontal, mobil vertikal */}
+                            <div className="pp-hero-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, position: 'relative', zIndex: 2 }}>
+
+                                {/* Left: avatar + name */}
+                                <div className="pp-hero-left" style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
                                     {/* Avatar */}
                                     <div className="pp-av-group" style={{ flexShrink: 0 }}>
                                         <div style={{
-                                            width: 100, height: 100, borderRadius: '50%',
+                                            width: 90, height: 90, borderRadius: '50%',
                                             border: '4px solid rgba(255,255,255,0.3)', overflow: 'hidden',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             background: 'rgba(255,255,255,0.15)',
                                             boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-                                            fontSize: 32, fontWeight: 900, color: '#fff', letterSpacing: '-.04em',
+                                            fontSize: 28, fontWeight: 900, color: '#fff', letterSpacing: '-.04em',
                                         }}>
                                             {avatarSrc
                                                 ? <img src={avatarSrc} alt="Avatar"
@@ -184,7 +212,7 @@ export function ProfilePage() {
                                                         (e.target as HTMLImageElement).src =
                                                             `https://ui-avatars.com/api/?name=${formData.first_name}+${formData.last_name}&background=5D7B93&color=fff&bold=true`;
                                                     }} />
-                                                : `${formData.first_name?.[0] ?? ''}${formData.last_name?.[0] ?? ''}` || <User size={32} color="rgba(255,255,255,0.7)" />
+                                                : `${formData.first_name?.[0] ?? ''}${formData.last_name?.[0] ?? ''}` || <User size={28} color="rgba(255,255,255,0.7)" />
                                             }
                                         </div>
                                         <div className="pp-av-overlay" onClick={() => fileInputRef.current?.click()}>
@@ -195,7 +223,7 @@ export function ProfilePage() {
 
                                     {/* Name */}
                                     <div className="pp-hero-text" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-.03em', lineHeight: 1.2 }}>
+                                        <h1 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-.03em', lineHeight: 1.2 }}>
                                             {formData.first_name} {formData.last_name}
                                         </h1>
                                         <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', margin: 0, fontWeight: 500 }}>
@@ -213,24 +241,28 @@ export function ProfilePage() {
                                     </div>
                                 </div>
 
+                                {/* ✅ Edit button — mobilda to'liq kenglikda */}
                                 {!isEditing && (
-                                    <button className="pp-edit-btn" onClick={() => setIsEditing(true)} style={{
-                                        padding: '10px 26px', borderRadius: 14, border: 'none',
-                                        background: '#fff', color: '#5D7B93',
-                                        fontSize: 10, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase',
-                                        cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', flexShrink: 0,
-                                    }}>
-                                        {t('edit_profile')}
-                                    </button>
+                                    <div className="pp-edit-btn-wrap" style={{ flexShrink: 0 }}>
+                                        <button className="pp-edit-btn" onClick={() => setIsEditing(true)} style={{
+                                            padding: '10px 26px', borderRadius: 14, border: 'none',
+                                            background: '#fff', color: '#5D7B93',
+                                            fontSize: 10, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase',
+                                            cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                                            whiteSpace: 'nowrap',
+                                        }}>
+                                            {t('edit_profile')}
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>
 
                         {/* BODY */}
-                        <div style={{ padding: '32px 40px 36px' }}>
+                        <div className="pp-body-pad" style={{ padding: '28px 32px 32px' }}>
 
                             {/* Section header */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
                                 <div style={{
                                     width: 36, height: 36, borderRadius: 10,
                                     background: 'linear-gradient(135deg, #5D7B93, #A2B3C1)',
@@ -251,6 +283,7 @@ export function ProfilePage() {
                                     marginLeft: 'auto', padding: '3px 10px', borderRadius: 6,
                                     background: 'rgba(93,123,147,0.1)', border: '1px solid rgba(93,123,147,0.2)',
                                     fontSize: 9, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#5D7B93',
+                                    flexShrink: 0,
                                 }}>
                                     {user?.role || 'Staff'}
                                 </div>
@@ -272,9 +305,9 @@ export function ProfilePage() {
                                                 <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(93,123,147,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                                     {item.icon}
                                                 </div>
-                                                <div>
+                                                <div style={{ minWidth: 0 }}>
                                                     <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.15em', textTransform: 'uppercase', color: '#5D7B93', marginBottom: 4 }}>{item.label}</div>
-                                                    <div style={{ fontSize: 14, fontWeight: 600, color: txt }}>{item.value}</div>
+                                                    <div style={{ fontSize: 13, fontWeight: 600, color: txt, wordBreak: 'break-all' }}>{item.value}</div>
                                                 </div>
                                             </div>
                                         ))}
@@ -291,7 +324,7 @@ export function ProfilePage() {
                                         </div>
                                         <div style={{ flex: 1 }}>
                                             <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.15em', textTransform: 'uppercase', color: '#5D7B93', marginBottom: 4 }}>{t('biography')}</div>
-                                            <div style={{ fontSize: 14, fontWeight: 500, color: formData.bio ? txt : muted, fontStyle: formData.bio ? 'normal' : 'italic', lineHeight: 1.6 }}>
+                                            <div style={{ fontSize: 13, fontWeight: 500, color: formData.bio ? txt : muted, fontStyle: formData.bio ? 'normal' : 'italic', lineHeight: 1.6 }}>
                                                 {formData.bio || t('no_biography')}
                                             </div>
                                         </div>
@@ -301,7 +334,7 @@ export function ProfilePage() {
                             ) : (
                                 /* EDIT MODE */
                                 <form onSubmit={handleSave}>
-                                    <div className="pp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                                    <div className="pp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
                                         <div>
                                             <label className={labelClass}>{t('first_name')}</label>
                                             <input type="text" className={inputClass} placeholder="Botir"
@@ -314,7 +347,7 @@ export function ProfilePage() {
                                         </div>
                                     </div>
 
-                                    <div className="pp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                                    <div className="pp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
                                         <div>
                                             <label className={labelClass}>{t('email_address')}</label>
                                             <div style={{ position: 'relative' }}>
@@ -333,7 +366,7 @@ export function ProfilePage() {
                                         </div>
                                     </div>
 
-                                    <div style={{ marginBottom: 28 }}>
+                                    <div style={{ marginBottom: 24 }}>
                                         <label className={labelClass}>{t('biography')}</label>
                                         <textarea rows={3} className={inputClass} style={{ resize: 'none' }}
                                             placeholder={t('bio_placeholder')}
@@ -345,7 +378,7 @@ export function ProfilePage() {
                                         <button type="button" className="pp-cancel-btn"
                                             onClick={() => { setIsEditing(false); fetchProfileData(); }}
                                             style={{
-                                                flex: 1, padding: '16px 0', borderRadius: 24, border: 'none',
+                                                flex: 1, padding: '14px 0', borderRadius: 24, border: 'none',
                                                 fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase',
                                                 cursor: 'pointer', background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9', color: muted,
                                             }}>
@@ -353,7 +386,7 @@ export function ProfilePage() {
                                         </button>
                                         <button type="submit" className="pp-save-btn" disabled={updating}
                                             style={{
-                                                flex: 2, padding: '16px 0', borderRadius: 24, border: 'none',
+                                                flex: 2, padding: '14px 0', borderRadius: 24, border: 'none',
                                                 fontSize: 10, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase',
                                                 cursor: 'pointer', background: 'linear-gradient(135deg, #5D7B93 0%, #A2B3C1 100%)',
                                                 color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
