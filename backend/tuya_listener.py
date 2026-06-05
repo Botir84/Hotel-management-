@@ -8,6 +8,7 @@ import django
 import sys
 import time
 import logging
+import requests
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -17,9 +18,12 @@ django.setup()
 
 from tuya_connector import TuyaOpenPulsar, TuyaCloudPulsarTopic
 
-CLIENT_ID     = os.getenv("TUYA_CLIENT_ID")
-CLIENT_SECRET = os.getenv("TUYA_CLIENT_SECRET")
-WS_ENDPOINT   = "wss://mqe.tuyaeu.com:8285/"
+CLIENT_ID      = os.getenv("TUYA_CLIENT_ID")
+CLIENT_SECRET  = os.getenv("TUYA_CLIENT_SECRET")
+WS_ENDPOINT    = "wss://mqe.tuyaeu.com:8285/"
+
+# ✅ recorder.py Mac da ishlaydi — shu URL ga signal yuboramiz
+RECORDER_URL   = os.getenv("RECORDER_URL", "http://camera.sofahotel.uz:8080/record")
 
 # ============================================================
 # XABAR HANDLER
@@ -76,6 +80,28 @@ def handle_tuya_message(msg):
 # ============================================================
 # CRM — TO'G'RIDAN DB GA YOZISH
 # ============================================================
+
+def notify_recorder(room_number: str, alert_id: int, device_id: str):
+    """Mac dagi recorder.py ga signal yuboradi."""
+    try:
+        resp = requests.post(
+            RECORDER_URL,
+            json={
+                "room_number": room_number,
+                "alert_id":    alert_id,
+                "device_id":   device_id,
+            },
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            print(f"🎥 Recorder ga signal yuborildi! Alert #{alert_id}")
+        else:
+            print(f"⚠️  Recorder xato: {resp.status_code}")
+    except requests.exceptions.ConnectionError:
+        print(f"⚠️  Recorder ulanmagan — Mac da recorder.py ishlaymaptimi?")
+    except Exception as e:
+        print(f"⚠️  Recorder signal xato: {e}")
+
 
 def handle_door_event(device_id, is_open):
     from django.utils import timezone
@@ -145,6 +171,14 @@ def handle_door_event(device_id, is_open):
             risk_score=risk_score,
         )
         print(f"🚨 ALERT #{alert.id} yaratildi! Xona: {room.number}")
+
+        # ✅ Mac dagi recorder.py ga signal yuboramiz
+        notify_recorder(
+            room_number=room.number,
+            alert_id=alert.id,
+            device_id=device_id,
+        )
+
     elif risk_score >= 20:
         print(f"⚠️  Past risk — log qilindi.")
     else:
@@ -166,8 +200,9 @@ def start_listener():
         print("❌ TUYA_CLIENT_ID yoki TUYA_CLIENT_SECRET yo'q!")
         sys.exit(1)
 
-    print(f"\n⚙️  Client ID  : {CLIENT_ID[:8]}...")
-    print(f"   WS Endpoint: {WS_ENDPOINT}")
+    print(f"\n⚙️  Client ID   : {CLIENT_ID[:8]}...")
+    print(f"   WS Endpoint : {WS_ENDPOINT}")
+    print(f"   Recorder URL: {RECORDER_URL}")
 
     retry_count = 0
 
@@ -178,7 +213,7 @@ def start_listener():
                 access_id=CLIENT_ID,
                 access_secret=CLIENT_SECRET,
                 ws_endpoint=WS_ENDPOINT,
-                topic=TuyaCloudPulsarTopic.TEST,  # TEST — real sensorlar uchun ishlaydi
+                topic=TuyaCloudPulsarTopic.TEST,
             )
 
             open_pulsar.add_message_listener(handle_tuya_message)
