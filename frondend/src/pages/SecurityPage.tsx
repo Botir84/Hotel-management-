@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useRef, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
     ShieldAlert, ShieldCheck, Activity, Clock,
     Eye, ExternalLink, AlertTriangle, Camera,
@@ -9,7 +9,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SecurityAlertDetail } from '../components/security/SecurityAlertDetail';
 import api from '../services/api';
 
-const CAMERA_BASE_URL = 'https://camera.sofahotel.uz';
+// ✅ Tailscale IP + WebRTC port 8889
+const CAMERA_WEBRTC_BASE = 'http://100.94.22.47:8889';
 
 interface SecurityAlert {
     id: number;
@@ -23,109 +24,89 @@ interface SecurityAlert {
 interface CameraConfig {
     id: string;
     name: string;
-    hlsUrl: string;
+    webrtcUrl: string;
     location: string;
 }
 
-// ✅ URL yangilandi: /hls/camera/ → /camera/
 const CAMERAS: CameraConfig[] = [
     {
         id: 'camera',
         name: 'Kamera #1',
-        hlsUrl: `${CAMERA_BASE_URL}/camera/index.m3u8`,
+        webrtcUrl: `${CAMERA_WEBRTC_BASE}/camera`,
         location: 'Resepshn',
     },
     // Yangi kamera qo'shilganda:
     // {
     //   id: 'camera2',
     //   name: 'Kamera #2',
-    //   hlsUrl: `${CAMERA_BASE_URL}/camera2/index.m3u8`,
+    //   webrtcUrl: `${CAMERA_WEBRTC_BASE}/camera2`,
     //   location: 'Koridor',
     // },
 ];
 
-// ─── HLS Video Player ──────────────────────────────────────────────────────────
-function HLSPlayer({ camera }: { camera: CameraConfig }) {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const [online, setOnline] = useState(false);
-    const [loading, setLoading] = useState(true);
+// ─── WebRTC Player — iframe orqali ───────────────────────────────────────────
+function WebRTCPlayer({ camera }: { camera: CameraConfig }) {
+    const [online, setOnline] = useState<boolean | null>(null); // null = tekshirilmoqda
+    const iframeRef = useRef<HTMLIFrameElement>(null);
 
     useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-
-        setLoading(true);
-        setOnline(false);
-
-        if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            // Safari — Native HLS
-            video.src = camera.hlsUrl;
-            video.addEventListener('loadeddata', () => { setOnline(true); setLoading(false); });
-            video.addEventListener('error', () => { setOnline(false); setLoading(false); });
-            video.play().catch(() => { });
-        } else {
-            // Chrome, Firefox — hls.js
-            import('https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js' as any)
-                .then((module: any) => {
-                    const Hls = module.default;
-                    if (Hls.isSupported()) {
-                        const hls = new Hls({ lowLatencyMode: true });
-                        hls.loadSource(camera.hlsUrl);
-                        hls.attachMedia(video);
-                        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                            setOnline(true);
-                            setLoading(false);
-                            video.play().catch(() => { });
-                        });
-                        hls.on(Hls.Events.ERROR, () => {
-                            setOnline(false);
-                            setLoading(false);
-                        });
-                        return () => hls.destroy();
-                    }
-                })
-                .catch(() => { setOnline(false); setLoading(false); });
-        }
-    }, [camera.hlsUrl]);
+        setOnline(null);
+        // mediamtx API orqali kamera online ekanini tekshiramiz
+        fetch(`${CAMERA_WEBRTC_BASE.replace(':8889', ':9997')}/v3/paths/list`)
+            .then(r => r.json())
+            .then(data => {
+                const cam = data.items?.find((i: any) => i.name === camera.id);
+                setOnline(cam?.ready === true);
+            })
+            .catch(() => setOnline(false));
+    }, [camera.id]);
 
     return (
         <div className="relative w-full h-full bg-black">
-            <video
-                ref={videoRef}
-                className="w-full h-full object-cover"
-                muted
-                autoPlay
-                playsInline
+            {/* WebRTC iframe */}
+            <iframe
+                ref={iframeRef}
+                src={camera.webrtcUrl}
+                className="w-full h-full border-0"
+                allow="autoplay; fullscreen"
+                title={camera.name}
             />
 
-            {loading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
-                    <RefreshCw size={32} className="text-white/40 animate-spin mb-3" />
+            {/* Tekshirilmoqda */}
+            {online === null && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 pointer-events-none">
+                    <RefreshCw size={28} className="text-white/40 animate-spin mb-2" />
                     <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Ulanmoqda...</p>
                 </div>
             )}
 
-            {!loading && !online && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
+            {/* Offline */}
+            {online === false && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 pointer-events-none">
                     <WifiOff size={40} className="text-white/20 mb-3" />
                     <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Kamera offline</p>
                     <p className="text-[9px] text-white/20 mt-1">mediamtx ishga tushirilganmi?</p>
                 </div>
             )}
 
-            {online && (
-                <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 px-3 py-1.5 rounded-full text-[9px] font-black text-white animate-pulse shadow-lg">
+            {/* REC badge */}
+            {online === true && (
+                <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 px-3 py-1.5 rounded-full text-[9px] font-black text-white animate-pulse shadow-lg pointer-events-none">
                     <div className="w-1.5 h-1.5 bg-white rounded-full" /> REC LIVE
                 </div>
             )}
 
-            <div className={`absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black
-                ${online ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
-                {online ? <Wifi size={10} /> : <WifiOff size={10} />}
-                {online ? 'Online' : 'Offline'}
+            {/* Online/Offline badge */}
+            <div className={`absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black pointer-events-none
+                ${online === true
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                {online === true ? <Wifi size={10} /> : <WifiOff size={10} />}
+                {online === true ? 'Online' : 'Offline'}
             </div>
 
-            <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-xl px-4 py-2 rounded-xl text-[9px] font-bold text-white border border-white/10 uppercase tracking-tighter">
+            {/* Camera name */}
+            <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-xl px-4 py-2 rounded-xl text-[9px] font-bold text-white border border-white/10 uppercase tracking-tighter pointer-events-none">
                 {camera.name} — {camera.location}
             </div>
         </div>
@@ -179,7 +160,6 @@ function CameraSelector({ selected, onSelect }: { selected: CameraConfig; onSele
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export const SecurityPage: React.FC = () => {
     const { isDark } = useTheme();
-    const queryClient = useQueryClient();
     const [selectedAlert, setSelectedAlert] = useState<SecurityAlert | null>(null);
     const [selectedCam, setSelectedCam] = useState<CameraConfig>(CAMERAS[0]);
 
@@ -253,7 +233,7 @@ export const SecurityPage: React.FC = () => {
                             </div>
                         )}
                         <div className="aspect-video">
-                            <HLSPlayer key={selectedCam.id} camera={selectedCam} />
+                            <WebRTCPlayer key={selectedCam.id} camera={selectedCam} />
                         </div>
                     </div>
 
