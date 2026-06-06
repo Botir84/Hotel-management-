@@ -17,30 +17,19 @@ interface DetailProps {
     onClose: () => void;
 }
 
-const BOT_TOKEN = '8351003332:AAGFyUZ21Oqq21qJg-f7ycMdCHGZhvlP_z8';
+// ✅ Telegram group linki
+const TELEGRAM_GROUP_URL = 'https://t.me/+OgVR8UsTmbFiZDky'; // <- group invite link qo'ying
 
 export function SecurityAlertDetail({ alert, onClose }: DetailProps) {
     const { isDark } = useTheme();
 
-    // ✅ video_clip da file_id yoki URL bo'lishi mumkin
     const getVideoUrl = (clip: string | null): string | null => {
         if (!clip) return null;
-        // To'liq URL bo'lsa — to'g'ridan qaytaramiz
         if (clip.startsWith('http')) return clip;
-        // file_id bo'lsa — Telegram URL yasaymiz
-        // Lekin Telegram file URL vaqtinchalik, shuning uchun Telegram ga yo'naltiramiz
-        return null;
-    };
-
-    const getTelegramUrl = (clip: string | null): string | null => {
-        if (!clip) return null;
-        if (clip.startsWith('http')) return clip;
-        // file_id — Telegram bot orqali ko'rish
-        return `https://t.me/hotel_sofa_security_bot`;
+        return null; // file_id — Telegram da ko'rish
     };
 
     const videoUrl = getVideoUrl(alert.video_clip);
-    const telegramUrl = getTelegramUrl(alert.video_clip);
     const hasVideo = !!alert.video_clip;
 
     const getStatusConfig = (s: string) => {
@@ -87,125 +76,94 @@ export function SecurityAlertDetail({ alert, onClose }: DetailProps) {
                             </p>
                         </div>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className={`p-3 rounded-2xl transition-all active:scale-90 ${isDark ? 'hover:bg-white/5 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
-                    >
+                    <button onClick={onClose} className={`p-3 rounded-2xl transition-all active:scale-90 ${isDark ? 'hover:bg-white/5 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}>
                         <X size={22} />
                     </button>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12">
 
-                    {/* Video Player */}
+                    {/* Video */}
                     <div className="lg:col-span-7 p-6 bg-black/20 flex items-center justify-center min-h-[350px] border-r border-slate-500/10">
                         {videoUrl ? (
-                            // To'liq URL — video player
                             <div className="relative w-full aspect-video rounded-[2rem] overflow-hidden shadow-2xl border border-white/10 bg-black">
-                                <video
-                                    key={alert.id}
-                                    src={videoUrl}
-                                    controls
-                                    autoPlay
-                                    className="w-full h-full object-contain"
-                                />
+                                <video key={alert.id} src={videoUrl} controls autoPlay className="w-full h-full object-contain" />
                             </div>
                         ) : hasVideo ? (
-                            // file_id bor — Telegram da ko'rish
+                            // ✅ file_id bor — Telegram grupada ko'rish
                             <div className="flex flex-col items-center gap-6 text-slate-500">
                                 <div className="p-8 rounded-full bg-blue-500/10 border border-blue-500/20">
-                                    <Play size={48} className="text-blue-400" />
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8l-1.68 7.92c-.12.56-.44.7-.88.44l-2.44-1.8-1.18 1.14c-.13.13-.24.24-.5.24l.18-2.5 4.56-4.12c.2-.18-.04-.28-.3-.1L7.74 14.6l-2.4-.75c-.52-.16-.53-.52.11-.77l9.38-3.62c.43-.16.81.1.81.34z" fill="#2BA0D8" />
+                                    </svg>
                                 </div>
-                                <div className="text-center">
-                                    <p className="text-xs font-black uppercase tracking-widest mb-2 text-blue-400">
-                                        Video Telegram da saqlangan
+                                <div className="text-center space-y-3">
+                                    <p className="text-sm font-black uppercase tracking-widest text-blue-400">
+                                        Video Telegram Grupada
                                     </p>
-                                    <p className="text-[10px] text-slate-500 mb-4">
-                                        Videoni ko'rish uchun Telegram botga o'ting
+                                    <p className="text-[11px] text-slate-500 max-w-[220px] leading-relaxed">
+                                        Video <b>Sofahotel Hotel Security Group</b> ga yuborilgan. Ko'rish uchun grupaga o'ting.
                                     </p>
                                     <button
-                                        onClick={() => window.open(telegramUrl!, '_blank')}
-                                        className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-400 transition-all"
+                                        onClick={() => window.open(TELEGRAM_GROUP_URL, '_blank')}
+                                        className="flex items-center gap-2 px-6 py-3 bg-[#2BA0D8] text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-[#229ac8] transition-all mx-auto"
                                     >
                                         <ExternalLink size={14} />
-                                        Telegram da ko'rish
+                                        Telegram Grupada Ko'rish
                                     </button>
                                 </div>
                             </div>
                         ) : (
-                            // Video yo'q
                             <div className="flex flex-col items-center gap-4 text-slate-500">
                                 <div className="p-6 rounded-full bg-slate-500/5 border border-slate-500/10">
                                     <Play size={40} className="opacity-20" />
                                 </div>
-                                <p className="text-xs font-black uppercase tracking-widest opacity-40">
-                                    No Video Evidence Available
-                                </p>
+                                <p className="text-xs font-black uppercase tracking-widest opacity-40">No Video Evidence Available</p>
                             </div>
                         )}
                     </div>
 
-                    {/* Info Panel */}
+                    {/* Info */}
                     <div className="lg:col-span-5 p-8 md:p-10 space-y-8">
-
-                        {/* Status */}
                         <div className={`p-6 rounded-[2rem] border ${config.bg} ${config.border} space-y-3 shadow-sm`}>
                             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
                                 <Info size={14} /> Case Status
                             </div>
                             <div className={`flex items-center gap-3 text-xl font-black italic uppercase ${config.color}`}>
-                                {config.icon}
-                                {config.label}
+                                {config.icon} {config.label}
                             </div>
                         </div>
 
-                        {/* Metadata */}
                         <div className="space-y-5">
-                            <div className="flex items-center gap-5">
-                                <div className={`p-3.5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
-                                    <Hash size={20} className="text-[#5D7B93]" />
+                            {[
+                                { icon: <Hash size={20} className="text-[#5D7B93]" />, label: 'Case Identifier', value: `#ALRT-${alert.id}` },
+                                {
+                                    icon: <Calendar size={20} className="text-[#5D7B93]" />, label: 'Detection Date',
+                                    value: new Date(alert.detected_at).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'long', year: 'numeric' })
+                                },
+                                {
+                                    icon: <Clock size={20} className="text-[#5D7B93]" />, label: 'Event Timestamp',
+                                    value: new Date(alert.detected_at).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                                },
+                            ].map((item, i) => (
+                                <div key={i} className="flex items-center gap-5">
+                                    <div className={`p-3.5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                                        {item.icon}
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{item.label}</p>
+                                        <p className={`text-base font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{item.value}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Case Identifier</p>
-                                    <p className={`text-base font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                                        #ALRT-{alert.id}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-5">
-                                <div className={`p-3.5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
-                                    <Calendar size={20} className="text-[#5D7B93]" />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Detection Date</p>
-                                    <p className={`text-base font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                                        {new Date(alert.detected_at).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-5">
-                                <div className={`p-3.5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
-                                    <Clock size={20} className="text-[#5D7B93]" />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Event Timestamp</p>
-                                    <p className={`text-base font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                                        {new Date(alert.detected_at).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                    </p>
-                                </div>
-                            </div>
+                            ))}
                         </div>
 
-                        {/* AI Note */}
                         <div className={`p-5 rounded-2xl border text-[11px] font-medium leading-relaxed
                             ${isDark ? 'bg-white/5 border-white/5 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
                             <strong className="text-blue-500 uppercase tracking-widest text-[9px] block mb-1">AI Diagnostics:</strong>
-                            Hand-to-hand object transfer recognized at Cashier Station #01. System is matching with CRM transaction logs for final verification.
+                            Eshik ochildi — xavfsizlik tizimi tomonidan qayd etildi. CRM bilan tekshirilmoqda.
                         </div>
 
-                        {/* Close */}
                         <button
                             onClick={onClose}
                             className="w-full py-4 bg-gradient-to-r from-[#5D7B93] to-[#7A97AD] text-white text-xs font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-[#5D7B93]/20 hover:scale-[1.02] active:scale-95 transition-all"
