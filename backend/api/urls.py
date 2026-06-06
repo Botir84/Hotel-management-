@@ -8,8 +8,8 @@ from .views import (
     CheckPaymentSecurity,
     SecurityAlertAPI,
     UserProfileView,
-    CameraZoneViewSet,
-    DoorStatusView
+    DoorStatusView,
+    SecurityAlertDetailAPI
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -35,4 +35,5 @@ urlpatterns = [
     # 5 daqiqalik tekshiruv mantiqini ishga tushirish uchun
     path('security/check/', CheckPaymentSecurity.as_view(), name='verify-security-status'),
     path('rooms/<int:room_id>/door-status/', DoorStatusView.as_view()),
+    path('security/alerts/<int:alert_id>/', SecurityAlertDetailAPI.as_view()),
 ]

@@ -153,35 +153,45 @@ from django.utils import timezone
 
 class SecurityAlertAPI(APIView):
     permission_classes = [AllowAny]
-    # Fayllarni (MultiPart) va JSON-ni qabul qilish uchun parserlar shart
     parser_classes = (parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser)
     
     def get(self, request):
-        # Modelingizdagi Meta ordering ishlaydi, lekin qo'shimcha tartiblash zarar qilmaydi
         alerts = SecurityAlert.objects.all()[:30]
         serializer = SecurityAlertSerializer(alerts, many=True)
         return Response(serializer.data)
 
     def post(self, request):
-        # AI kodingizda: files = {'video_clip': f} deb yuborilyapti
         video_file = request.FILES.get('video_clip')
-        
-        # 1. Alertni yaratish
-        # detected_at default=timezone.now bo'lgani uchun uni ko'rsatish shart emas,
-        # lekin aniq vaqtni yozish xavfsizroq
         alert = SecurityAlert.objects.create(
             status='pending',
             detected_at=timezone.now(),
             video_clip=video_file
         )
-        
-        # 2. Response qaytarish
         return Response({
             "message": "Muvaffaqiyatli saqlandi",
             "id": alert.id,
             "status": alert.get_status_display(),
             "video_url": alert.video_clip.url if alert.video_clip else None
         }, status=status.HTTP_201_CREATED)
+
+
+# ✅ Yangi class — alert ni yangilash uchun
+class SecurityAlertDetailAPI(APIView):
+    permission_classes = [AllowAny]
+    parser_classes = (parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser)
+
+    def patch(self, request, alert_id):
+        try:
+            alert = SecurityAlert.objects.get(id=alert_id)
+        except SecurityAlert.DoesNotExist:
+            return Response({"error": "Alert topilmadi"}, status=404)
+        
+        video_clip = request.data.get('video_clip')
+        if video_clip:
+            alert.video_clip = video_clip
+            alert.save(update_fields=['video_clip'])
+        
+        return Response({"message": "Yangilandi", "id": alert.id})
 
 class CheckPaymentSecurity(APIView):
     permission_classes = [AllowAny] 
@@ -229,17 +239,6 @@ class CheckPaymentSecurity(APIView):
 
 
 
-class CameraZoneViewSet(viewsets.ModelViewSet):
-    queryset = CameraZone.objects.all().order_by('-created_at')
-    serializer_class = CameraZoneSerializer
-    permission_classes = [AllowAny] # Keyinchalik IsAdminUser qilish mumkin
-
-
-"""
-Bu kodni api/views.py ga qo'shing
-va api/urls.py ga path qo'shing:
-  path('rooms/<int:room_id>/door-status/', DoorStatusView.as_view()),
-"""
 
 class DoorStatusView(APIView):
     """
