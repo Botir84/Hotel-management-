@@ -17,7 +17,6 @@ router = DefaultRouter()
 router.register(r'rooms', RoomViewSet)
 router.register(r'checkins', CheckInViewSet)
 router.register(r'payments', PaymentViewSet)
-router.register(r'camera-zones', CameraZoneViewSet)
 
 urlpatterns = [
     # Routerdagi API-lar (rooms, checkins, incidents)
