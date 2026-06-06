@@ -27,19 +27,19 @@ interface CameraConfig {
     location: string;
 }
 
-// Kameralar ro'yxati — keyinroq ko'paytiriladi
+// ✅ URL yangilandi: /hls/camera/ → /camera/
 const CAMERAS: CameraConfig[] = [
     {
         id: 'camera',
         name: 'Kamera #1',
-        hlsUrl: `${CAMERA_BASE_URL}/hls/camera/index.m3u8`,
+        hlsUrl: `${CAMERA_BASE_URL}/camera/index.m3u8`,
         location: 'Resepshn',
     },
-    // Yangi kamera qo'shilganda shu yerga qo'shing:
+    // Yangi kamera qo'shilganda:
     // {
     //   id: 'camera2',
     //   name: 'Kamera #2',
-    //   hlsUrl: `${CAMERA_BASE_URL}/hls/camera2/index.m3u8`,
+    //   hlsUrl: `${CAMERA_BASE_URL}/camera2/index.m3u8`,
     //   location: 'Koridor',
     // },
 ];
@@ -57,14 +57,14 @@ function HLSPlayer({ camera }: { camera: CameraConfig }) {
         setLoading(true);
         setOnline(false);
 
-        // Native HLS (Safari) yoki hls.js ishlatamiz
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            // Safari — Native HLS
             video.src = camera.hlsUrl;
             video.addEventListener('loadeddata', () => { setOnline(true); setLoading(false); });
             video.addEventListener('error', () => { setOnline(false); setLoading(false); });
             video.play().catch(() => { });
         } else {
-            // hls.js (Chrome, Firefox)
+            // Chrome, Firefox — hls.js
             import('https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js' as any)
                 .then((module: any) => {
                     const Hls = module.default;
@@ -98,44 +98,33 @@ function HLSPlayer({ camera }: { camera: CameraConfig }) {
                 playsInline
             />
 
-            {/* Loading */}
             {loading && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
                     <RefreshCw size={32} className="text-white/40 animate-spin mb-3" />
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                        Ulanmoqda...
-                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Ulanmoqda...</p>
                 </div>
             )}
 
-            {/* Offline */}
             {!loading && !online && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
                     <WifiOff size={40} className="text-white/20 mb-3" />
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                        Kamera offline
-                    </p>
-                    <p className="text-[9px] text-white/20 mt-1">
-                        mediamtx ishga tushirilganmi?
-                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Kamera offline</p>
+                    <p className="text-[9px] text-white/20 mt-1">mediamtx ishga tushirilganmi?</p>
                 </div>
             )}
 
-            {/* REC badge */}
             {online && (
                 <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 px-3 py-1.5 rounded-full text-[9px] font-black text-white animate-pulse shadow-lg">
                     <div className="w-1.5 h-1.5 bg-white rounded-full" /> REC LIVE
                 </div>
             )}
 
-            {/* Online badge */}
             <div className={`absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black
                 ${online ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
                 {online ? <Wifi size={10} /> : <WifiOff size={10} />}
                 {online ? 'Online' : 'Offline'}
             </div>
 
-            {/* Camera name */}
             <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-xl px-4 py-2 rounded-xl text-[9px] font-bold text-white border border-white/10 uppercase tracking-tighter">
                 {camera.name} — {camera.location}
             </div>
@@ -194,12 +183,11 @@ export const SecurityPage: React.FC = () => {
     const [selectedAlert, setSelectedAlert] = useState<SecurityAlert | null>(null);
     const [selectedCam, setSelectedCam] = useState<CameraConfig>(CAMERAS[0]);
 
-    // ✅ React Query — alerts cache
     const { data: alerts = [], isLoading, isFetching } = useQuery({
         queryKey: ['security-alerts'],
         queryFn: () => api.get('/security/alerts/').then(r => r.data),
         staleTime: 5_000,
-        refetchInterval: 5_000,  // 5 soniyada yangilanadi
+        refetchInterval: 5_000,
     });
 
     const systemStatus = alerts.some((a: SecurityAlert) => a.status === 'theft') ? 'Warning' : 'Active';
@@ -216,13 +204,11 @@ export const SecurityPage: React.FC = () => {
         <div className={`relative min-h-screen p-4 sm:p-6 md:p-8 overflow-x-hidden transition-colors duration-300
             ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
 
-            {/* Background */}
             <div className="absolute top-[-5%] left-[-5%] w-[60%] h-[40%] bg-blue-600/10 rounded-full blur-[120px] -z-10" />
             <div className="absolute bottom-[-5%] right-[-5%] w-[60%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px] -z-10" />
 
             {/* Header */}
-            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 md:mb-10 gap-6
-                animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 md:mb-10 gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
                 <div>
                     <h1 className="text-xl sm:text-2xl md:text-3xl font-black flex items-center gap-3 tracking-tight">
                         <ShieldAlert
@@ -259,25 +245,18 @@ export const SecurityPage: React.FC = () => {
 
                 {/* Live Feed */}
                 <div className="lg:col-span-8 space-y-6">
-
-                    {/* Camera selector + player */}
                     <div className={`relative rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border shadow-2xl
                         ${isDark ? 'bg-slate-950 border-white/5' : 'bg-slate-900 border-gray-200'}`}>
-
-                        {/* Kamera tanlash */}
                         {CAMERAS.length > 1 && (
                             <div className="absolute top-4 left-4 z-20">
                                 <CameraSelector selected={selectedCam} onSelect={setSelectedCam} />
                             </div>
                         )}
-
-                        {/* Video */}
                         <div className="aspect-video">
                             <HLSPlayer key={selectedCam.id} camera={selectedCam} />
                         </div>
                     </div>
 
-                    {/* Tizim parametrlari */}
                     <div className={`p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border ${cardBase}`}>
                         <h3 className={`text-sm md:text-base font-black mb-5 flex items-center gap-2 uppercase tracking-widest
                             ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
@@ -301,15 +280,11 @@ export const SecurityPage: React.FC = () => {
 
                 {/* Alert Feed */}
                 <div className="lg:col-span-4">
-                    <div className={`rounded-[2rem] md:rounded-[2.5rem] border flex flex-col overflow-hidden
-                        max-h-[600px] lg:max-h-[800px] ${cardBase}`}>
-                        <div className={`p-5 md:p-6 border-b bg-white/5 sticky top-0 z-10
-                            ${isDark ? 'border-white/5' : 'border-gray-200'}`}>
+                    <div className={`rounded-[2rem] md:rounded-[2.5rem] border flex flex-col overflow-hidden max-h-[600px] lg:max-h-[800px] ${cardBase}`}>
+                        <div className={`p-5 md:p-6 border-b bg-white/5 sticky top-0 z-10 ${isDark ? 'border-white/5' : 'border-gray-200'}`}>
                             <h2 className="font-black text-xs md:text-sm uppercase tracking-[0.2em] flex items-center justify-between">
                                 So'nggi hodisalar
-                                <span className="text-[8px] bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-1 rounded-lg uppercase">
-                                    Live
-                                </span>
+                                <span className="text-[8px] bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-1 rounded-lg uppercase">Live</span>
                             </h2>
                         </div>
 
@@ -333,14 +308,12 @@ export const SecurityPage: React.FC = () => {
                                                 ? 'bg-red-500/10 border-red-500/20'
                                                 : alert.status === 'verified'
                                                     ? 'bg-emerald-500/10 border-emerald-500/20'
-                                                    : 'bg-amber-500/10 border-amber-500/20'
-                                            }`}
+                                                    : 'bg-amber-500/10 border-amber-500/20'}`}
                                         onClick={() => setSelectedAlert(alert)}
                                     >
                                         <div className="flex justify-between items-center mb-3">
                                             <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest text-white shadow-sm
-                                                ${alert.status === 'theft' ? 'bg-red-500' :
-                                                    alert.status === 'verified' ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                                                ${alert.status === 'theft' ? 'bg-red-500' : alert.status === 'verified' ? 'bg-emerald-500' : 'bg-amber-500'}`}>
                                                 {alert.status}
                                             </span>
                                             <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1">
