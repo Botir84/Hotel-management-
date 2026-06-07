@@ -99,17 +99,17 @@ export function SecurityAlertDetail({ alert, onClose }: DetailProps) {
                                 </div>
                                 <div className="text-center space-y-3">
                                     <p className="text-sm font-black uppercase tracking-widest text-blue-400">
-                                        Video Telegram Grupada
+                                        Video in Telegram Group
                                     </p>
                                     <p className="text-[11px] text-slate-500 max-w-[220px] leading-relaxed">
-                                        Video <b>Sofahotel Hotel Security Group</b> ga yuborilgan. Ko'rish uchun grupaga o'ting.
+                                        Video sent to <b>Sofahotel Hotel Security Group</b> Go to group to view.
                                     </p>
                                     <button
                                         onClick={() => window.open(TELEGRAM_GROUP_URL, '_blank')}
                                         className="flex items-center gap-2 px-6 py-3 bg-[#2BA0D8] text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-[#229ac8] transition-all mx-auto"
                                     >
                                         <ExternalLink size={14} />
-                                        Telegram Grupada Ko'rish
+                                        Go to telegram group
                                     </button>
                                 </div>
                             </div>
@@ -161,7 +161,7 @@ export function SecurityAlertDetail({ alert, onClose }: DetailProps) {
                         <div className={`p-5 rounded-2xl border text-[11px] font-medium leading-relaxed
                             ${isDark ? 'bg-white/5 border-white/5 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
                             <strong className="text-blue-500 uppercase tracking-widest text-[9px] block mb-1">AI Diagnostics:</strong>
-                            Eshik ochildi — xavfsizlik tizimi tomonidan qayd etildi. CRM bilan tekshirilmoqda.
+                            The available status door was opened and an alert was created.
                         </div>
 
                         <button
