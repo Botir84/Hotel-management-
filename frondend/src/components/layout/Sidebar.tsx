@@ -245,7 +245,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           </div>
           <div className="flex flex-col whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-500 delay-150 translate-x-[-10px] group-hover:translate-x-0">
             <p className={`font-black text-xl tracking-tighter ${isDark ? 'text-white' : 'text-slate-800'}`}>
-              HOTEL<span className="text-[#5D7B93]">CRM</span>
+              SofaHotel<span className="text-[#5D7B93]">CRM</span>
             </p>
             <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${textMuted}`}>Management</p>
           </div>
