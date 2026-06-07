@@ -285,7 +285,7 @@ export function CheckInModal({ isOpen, onClose, room, onSuccess }: any) {
                     <h4 className="text-sm md:text-base font-black uppercase tracking-widest text-[#5D7B93]">{t('total_amount')}</h4>
                   </div>
                   <span className={`text-2xl md:text-4xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-[#2C3E50]'}`}>
-                    ${parseFloat(form.payment_amount).toLocaleString()}
+                    {parseFloat(form.payment_amount).toLocaleString()}so'm
                   </span>
                 </div>
               </div>
